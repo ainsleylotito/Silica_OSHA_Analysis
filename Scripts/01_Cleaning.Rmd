@@ -36,4 +36,57 @@ New variables created during the cleaning process, as well as a description of a
 
 2. Apply inclusion/exclusion criteria 
 
-3. Add OEL data, create variable that states whether observed sample is above or below.
+3. Add OEL data, create variable that states whether observed sample is above or below.  
+
+# Data Import and Initial Examination
+
+```{r import_data, results= FALSE}
+dat <- read_delim("../RawData/Respirable_Silica_Data.txt", delim = "|") 
+glimpse(dat)
+head(dat) 
+tail(dat)
+``` 
+
+There are a couple of formatting tasks we need to take care of. We want to convert our data into the proper formats, and there are several variables included in the dataset that we will not need (Office, NAICS, Date_Reported, Lab_Number, CSHO). 
+
+Convert result to numeric, check how many are blanks? Also check how many are per sample type and make into nicer format. Check how many went in and used eight hour TWA calculation too. Changing time to be in terms of hours instead of minutes. Adding indicator in case of data being "less than" values, so we can go back in and perhaps do a sensitivity analysis of some kind or just have the knowledge that they were less than that number.
+
+To start, let's simply apply some reformats to our data: 
+
+```{r}
+dat <- dat |> 
+  rename_with(tolower) |> 
+  mutate(
+    date_sampled = dmy(date_sampled),
+         type = fct_recode(type,
+                          "Personal" = "P",
+                          "Area" = "A",
+                          "Bulk" = "B", 
+                          "Wipe" = "W"), 
+    blank = as.logical(blank),
+    time = time/60,
+    censored = grepl("^\\s*<", result),
+    result_num = as.numeric(gsub("<\\s*", "", result))
+    ) |> 
+  select(-office, -naics, -date_reported, -lab_number, -csho, -sic)
+```
+
+# Inclusion/Exclusion 
+
+To start, we have 2,135 observations. Next, we want to restrict our sample to only those pertaining to personal measurements. 
+
+```{r}
+dat |> 
+  group_by(type) |> 
+  summarize(n())
+```
+
+We will retain 1,839 observations that used Personal measurements. We will drop those for Area measurements (n = 20), and missing data (n = 276). 
+
+```{r}
+dat <- dat |> 
+  filter(type == "Personal")
+```
+
+
+Next, we want to get an idea of how our samples may differ depending on how many of them used a time-weighted average.
