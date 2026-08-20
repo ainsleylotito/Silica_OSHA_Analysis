@@ -1,0 +1,39 @@
+---
+title: "01_Cleaning"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    toc_float: true 
+output_dir: Output 
+--- 
+```{r setup}
+# Load packages
+library(tidyverse)
+library(ggplot2) 
+library(readxl) 
+library(lubridate)
+library(janitor)
+
+# Global options
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+
+```
+
+# Introduction 
+
+This script will contain the code necessary to clean the data stored in the `/RawData` folder. 
+
+To start it will focus on only cleaning data puled pertaining to the 9000 IMIS classification; later on, subsequent datasets may be cleaned, merged, and analyzed. 
+
+New variables created during the cleaning process, as well as a description of all other included variables, are contained within the excel file `DataDictionary.xlsx`.  
+
+**Goals of Cleaning:** 
+
+1. Ensure that UOM units are consistent 
+
+2. Apply inclusion/exclusion criteria 
+
+3. Add OEL data, create variable that states whether observed sample is above or below.
