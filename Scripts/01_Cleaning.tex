@@ -1,0 +1,915 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={01\_Cleaning},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{01\_Cleaning}
+\author{}
+\date{\vspace{-2.5em}}
+
+\begin{document}
+\maketitle
+
+{
+\setcounter{tocdepth}{3}
+\tableofcontents
+}
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# Load packages}
+\FunctionTok{library}\NormalTok{(tidyverse)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## -- Attaching core tidyverse packages ------------------------ tidyverse 2.0.0 --
+## v dplyr     1.2.1     v readr     2.2.0
+## v forcats   1.0.1     v stringr   1.6.0
+## v ggplot2   4.0.3     v tibble    3.3.1
+## v lubridate 1.9.5     v tidyr     1.3.2
+## v purrr     1.2.2     
+## -- Conflicts ------------------------------------------ tidyverse_conflicts() --
+## x dplyr::filter() masks stats::filter()
+## x dplyr::lag()    masks stats::lag()
+## i Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{library}\NormalTok{(ggplot2) }
+\FunctionTok{library}\NormalTok{(readxl) }
+\FunctionTok{library}\NormalTok{(lubridate)}
+\FunctionTok{library}\NormalTok{(janitor)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## 
+## Attaching package: 'janitor'
+## 
+## The following objects are masked from 'package:stats':
+## 
+##     chisq.test, fisher.test
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# Global options}
+\NormalTok{knitr}\SpecialCharTok{::}\NormalTok{opts\_chunk}\SpecialCharTok{$}\FunctionTok{set}\NormalTok{(}\AttributeTok{echo =} \ConstantTok{TRUE}\NormalTok{, }\AttributeTok{warning =} \ConstantTok{FALSE}\NormalTok{, }\AttributeTok{message =} \ConstantTok{FALSE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\section{Introduction}\label{introduction}
+
+This script will contain the code necessary to clean the data stored in
+the \texttt{/RawData} folder.
+
+To start it will focus on only cleaning data puled pertaining to the
+9000 IMIS classification; later on, subsequent datasets may be cleaned,
+merged, and analyzed.
+
+New variables created during the cleaning process, as well as a
+description of all other included variables, are contained within the
+excel file \texttt{DataDictionary.xlsx}.
+
+\textbf{Goals of Cleaning:}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\item
+  Ensure that UOM units are consistent
+\item
+  Apply inclusion/exclusion criteria
+\item
+  Add OEL data, create variable that states whether observed sample is
+  above or below.
+\end{enumerate}
+
+\section{Data Import and Initial
+Examination}\label{data-import-and-initial-examination}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\OtherTok{\textless{}{-}} \FunctionTok{read\_delim}\NormalTok{(}\StringTok{"../RawData/Respirable\_Silica\_Data.txt"}\NormalTok{, }\AttributeTok{delim =} \StringTok{"|"}\NormalTok{) }
+\FunctionTok{glimpse}\NormalTok{(dat)}
+\FunctionTok{head}\NormalTok{(dat) }
+\FunctionTok{tail}\NormalTok{(dat)}
+\end{Highlighting}
+\end{Shaded}
+
+There are a couple of formatting tasks we need to take care of. We want
+to convert our data into the proper formats, and there are several
+variables included in the dataset that we will not need (Office, NAICS,
+Date\_Reported, Lab\_Number, CSHO).
+
+We want to achieve the following: - Convert `result' to be numeric.
+\emph{Note:} some of these values are recorded as \textgreater{}
+measurement. To deal with this, we will make a new variable,
+\texttt{result\_num} that will report whatever number is associated with
+the measurement. Another variable, \texttt{less\_than\_measurement},
+will indicate whether the variable was ``less than'' or not.\\
+- Convert date to an R date format - Create a new variable that just
+contains the year of sample - Converting \texttt{time} to be in terms of
+hours, not minutes
+
+Convert result to numeric, check how many are blanks? Also check how
+many are per sample type and make into nicer format. Check how many went
+in and used eight hour TWA calculation too. Changing time to be in terms
+of hours instead of minutes. Adding indicator in case of data being
+``less than'' values, so we can go back in and perhaps do a sensitivity
+analysis of some kind or just have the knowledge that they were less
+than that number.
+
+To start, let's simply apply some reformats to our data:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{rename\_with}\NormalTok{(tolower) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}
+    \AttributeTok{date\_sampled =} \FunctionTok{dmy}\NormalTok{(date\_sampled), }
+    \AttributeTok{year =} \FunctionTok{year}\NormalTok{(date\_sampled),}
+         \AttributeTok{type =} \FunctionTok{fct\_recode}\NormalTok{(type,}
+                          \StringTok{"Personal"} \OtherTok{=} \StringTok{"P"}\NormalTok{,}
+                          \StringTok{"Area"} \OtherTok{=} \StringTok{"A"}\NormalTok{,}
+                          \StringTok{"Bulk"} \OtherTok{=} \StringTok{"B"}\NormalTok{, }
+                          \StringTok{"Wipe"} \OtherTok{=} \StringTok{"W"}\NormalTok{), }
+    \AttributeTok{blank =} \FunctionTok{as.logical}\NormalTok{(blank),}
+    \AttributeTok{time =}\NormalTok{ time}\SpecialCharTok{/}\DecValTok{60}\NormalTok{,}
+    \AttributeTok{less\_than\_measurement =} \FunctionTok{grepl}\NormalTok{(}\StringTok{"\^{}}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{s*\textless{}"}\NormalTok{, result),}
+    \AttributeTok{result\_num =} \FunctionTok{as.numeric}\NormalTok{(}\FunctionTok{gsub}\NormalTok{(}\StringTok{"\textless{}}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{s*"}\NormalTok{, }\StringTok{""}\NormalTok{, result))}
+\NormalTok{    ) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{office, }\SpecialCharTok{{-}}\NormalTok{naics, }\SpecialCharTok{{-}}\NormalTok{date\_reported, }\SpecialCharTok{{-}}\NormalTok{lab\_number, }\SpecialCharTok{{-}}\NormalTok{csho, }\SpecialCharTok{{-}}\NormalTok{sic)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Examination}\label{examination}
+
+We want to check some of these variables to see whether they are
+relevant to be included (i.e., contain multiple levels).
+
+Let's check what different values are in the data for
+\texttt{instrument}, \texttt{blank}, \texttt{weight}, and \texttt{uom}.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(instrument) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 2
+##   instrument `n()`
+##   <lgl>      <int>
+## 1 NA          2135
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(blank) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 2
+##   blank `n()`
+##   <lgl> <int>
+## 1 NA     2135
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{summary}\NormalTok{(dat}\SpecialCharTok{$}\NormalTok{weight)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.     NAs 
+##  0.0000  0.0150  0.0530  0.2887  0.1675 16.1420     569
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 7 x 2
+##   uom    `n()`
+##   <chr>  <int>
+## 1 M        202
+## 2 MCG/M3  1236
+## 3 MG       123
+## 4 MG_M3     69
+## 5 X        306
+## 6 Y        143
+## 7 <NA>      56
+\end{verbatim}
+
+It looks like we only have NA values for instrument and blank; we can
+drop. We do have information for weight that may be needed.
+
+For the unit of measurement, according to the data dictionary, M =
+mg/m\^{}3, X = micrograms, Y = milligrams. We have 56 NAs which we will
+need to explore -- it is possible it corresponds to values that contain
+sample weight and a result, from which we will need to complete some
+calculations.
+
+Let's check to see what the NA values correspond to before we reformat
+the uom variable.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(uom)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(weight, result\_num, qualifier, air\_volume)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 56 x 4
+##    weight result_num qualifier air_volume
+##     <dbl>      <dbl> <chr>          <dbl>
+##  1  0.124         NA <NA>            680.
+##  2  0             NA <NA>             NA 
+##  3  0.219         NA <NA>            719.
+##  4  0.068         NA <NA>            735.
+##  5  0.062         NA <NA>            720.
+##  6  0             NA <NA>            710.
+##  7  0.096         NA <NA>            708.
+##  8  0.057         NA <NA>            228.
+##  9  0.199         NA <NA>            515.
+## 10  0             NA <NA>             NA 
+## # i 46 more rows
+\end{verbatim}
+
+This is interesting, since we have measurements for weight, but we don't
+know what unit the sample is in for the bulks and silica samples. We are
+likely unable to use these observations.
+
+Another important aspect is that we have some units of measurement that
+are simply micrograms, and milligrams, without being accompanied with
+the air volume. Let's check and make sure that all of these instances
+correspond to an air volume value. If they are all complete, we will
+need to look into converting the air volume (liters) to meters cubed.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \FunctionTok{c}\NormalTok{(}\StringTok{"M"}\NormalTok{, }\StringTok{"MG"}\NormalTok{, }\StringTok{"X"}\NormalTok{, }\StringTok{"Y"}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(uom, air\_volume) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{total\_rows =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{non\_na\_values =} \FunctionTok{sum}\NormalTok{(}\SpecialCharTok{!}\FunctionTok{is.na}\NormalTok{(air\_volume)),}
+    \AttributeTok{na\_count =} \FunctionTok{sum}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(air\_volume))}
+\NormalTok{  )}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 4 x 4
+##   uom   total_rows non_na_values na_count
+##   <chr>      <int>         <int>    <int>
+## 1 M             60            57        3
+## 2 MG            30             0       30
+## 3 X             96             0       96
+## 4 Y             36             0       36
+\end{verbatim}
+
+It appears that we have some data that is missing air volume
+specifically. We will need to double check which rows are missing air
+volume after we exclude non-personal samples, and then look into
+creating a standardized measurement.
+
+Let's apply some reformatting again with the new information.\\
+M = mg/m\^{}3, X = micrograms, Y = milligrams.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{instrument, }\SpecialCharTok{{-}}\NormalTok{blank) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}
+    \AttributeTok{uom =} \FunctionTok{fct\_recode}\NormalTok{(uom,}
+                          \StringTok{"mg"} \OtherTok{=} \StringTok{"MG"}\NormalTok{, }\CommentTok{\#milligrams}
+                          \StringTok{"mg"} \OtherTok{=} \StringTok{"Y"}\NormalTok{, }\CommentTok{\#milligrams}
+                          \StringTok{"mcg"} \OtherTok{=} \StringTok{"X"}\NormalTok{, }\CommentTok{\#micrograms}
+                          \StringTok{"mcg/m3"} \OtherTok{=} \StringTok{"MCG/M3"}\NormalTok{, }\CommentTok{\#micrograms/m3}
+                          \StringTok{"mg/m3"} \OtherTok{=} \StringTok{"MG\_M3"}\NormalTok{, }\CommentTok{\#milligrams/m3}
+                          \StringTok{"mg/m3"} \OtherTok{=} \StringTok{"M"} \CommentTok{\#milligrams/m3}
+\NormalTok{                     )}
+\NormalTok{    )}
+  
+
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 5 x 2
+##   uom    `n()`
+##   <fct>  <int>
+## 1 mg/m3    271
+## 2 mcg/m3  1236
+## 3 mg       266
+## 4 mcg      306
+## 5 <NA>      56
+\end{verbatim}
+
+\section{Inclusion/Exclusion}\label{inclusionexclusion}
+
+\subsection{Personal Measurements}\label{personal-measurements}
+
+To start, we have 2,135 observations. Next, we want to restrict our
+sample to only those pertaining to personal measurements.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(type) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 3 x 2
+##   type     `n()`
+##   <fct>    <int>
+## 1 Area        20
+## 2 Personal  1839
+## 3 <NA>       276
+\end{verbatim}
+
+We will retain 1,839 observations that used Personal measurements. We
+will drop those for Area measurements (n = 20), and missing data (n =
+276).
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(type }\SpecialCharTok{==} \StringTok{"Personal"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+Now that we've excluded some samples, let's go back in and see how the
+air volume data fits or doesn't:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{\%in\%} \FunctionTok{c}\NormalTok{(}\StringTok{"mg"}\NormalTok{, }\StringTok{"mcg"}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(uom, air\_volume) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{total\_rows =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{non\_na\_values =} \FunctionTok{sum}\NormalTok{(}\SpecialCharTok{!}\FunctionTok{is.na}\NormalTok{(air\_volume)),}
+    \AttributeTok{na\_count =} \FunctionTok{sum}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(air\_volume))}
+\NormalTok{  )}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 4
+##   uom   total_rows non_na_values na_count
+##   <fct>      <int>         <int>    <int>
+## 1 mcg          299             0      299
+\end{verbatim}
+
+Let's also check to see the distribution of samples by year:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(year) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\AttributeTok{count =} \FunctionTok{n}\NormalTok{()) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{percent =}\NormalTok{ (count}\SpecialCharTok{/}\FunctionTok{sum}\NormalTok{(count))}\SpecialCharTok{*}\DecValTok{100}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 10 x 3
+##     year count percent
+##    <dbl> <int>   <dbl>
+##  1  2017    46    2.50
+##  2  2018    67    3.64
+##  3  2019   154    8.37
+##  4  2020    89    4.84
+##  5  2021   144    7.83
+##  6  2022   107    5.82
+##  7  2023   356   19.4 
+##  8  2024   534   29.0 
+##  9  2025   234   12.7 
+## 10  2026   108    5.87
+\end{verbatim}
+
+\emph{Note:} after excluding non-personal samples, we no longer have
+values that are in milligrams.
+
+We are left with the resulting microgram observations, which do appear
+as though they are all lacking data on air volume.
+
+Let's do one last check, as it is possible that these values correspond
+to the time-weighted average:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \StringTok{"mcg"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+##   eighthr `n()`
+##   <chr>   <int>
+## 1 N          62
+## 2 Y         237
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==}\StringTok{"mcg"} \SpecialCharTok{\&}\NormalTok{ eighthr }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(qualifier) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+##   qualifier `n()`
+##   <chr>     <int>
+## 1 ND            1
+## 2 ND-BLK       61
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==}\StringTok{"mcg"} \SpecialCharTok{\&}\NormalTok{ eighthr }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(air\_volume) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{total\_rows =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{non\_na\_values =} \FunctionTok{sum}\NormalTok{(}\SpecialCharTok{!}\FunctionTok{is.na}\NormalTok{(air\_volume)),}
+    \AttributeTok{na\_count =} \FunctionTok{sum}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(air\_volume))}
+\NormalTok{  )}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 4
+##   air_volume total_rows non_na_values na_count
+##        <dbl>      <int>         <int>    <int>
+## 1         NA         62             0       62
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==}\StringTok{"mcg"} \SpecialCharTok{\&}\NormalTok{ eighthr }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(result\_num) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summary}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##    result_num
+##  Min.   :0   
+##  1st Qu.:0   
+##  Median :0   
+##  Mean   :0   
+##  3rd Qu.:0   
+##  Max.   :0
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==}\StringTok{"mcg"} \SpecialCharTok{\&}\NormalTok{ eighthr }\SpecialCharTok{==} \StringTok{"Y"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(result\_num) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summary}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##    result_num      
+##  Min.   : 0.00000  
+##  1st Qu.: 0.00000  
+##  Median : 0.00000  
+##  Mean   : 0.04304  
+##  3rd Qu.: 0.00000  
+##  Max.   :10.20000
+\end{verbatim}
+
+Ok, we have figured out what happened --\textgreater{} specifically the
+measurements that aren't standardized to volume all contains results
+less than the quantification limit or are blank.
+
+\subsection{Time-weighted average
+observations}\label{time-weighted-average-observations}
+
+Next, we want to get an idea of how our samples may differ depending on
+how many of them used a time-weighted average.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 3 x 2
+##   eighthr           `n()`
+##   <chr>             <int>
+## 1 N                   728
+## 2 STEL CEILING PEAK     8
+## 3 Y                  1103
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(eighthr }\SpecialCharTok{==} \StringTok{"STEL CEILING PEAK"}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{select}\NormalTok{(}\FunctionTok{everything}\NormalTok{())  }\CommentTok{\# STEL information }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 8 x 18
+##   inspection sampling_number establishment date_sampled eighthr     field_number
+##        <dbl> <chr>           <chr>         <date>       <chr>       <chr>       
+## 1    1863156 484899-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 3B1         
+## 2    1863156 484896-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 2B2         
+## 3    1863156 484899-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 3B2         
+## 4    1863156 484900-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 5B1         
+## 5    1863156 484900-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 5B2         
+## 6    1863156 484896-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 2B1         
+## 7    1863156 484901-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 4B1         
+## 8    1863156 484901-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 4B2         
+## # i 12 more variables: type <fct>, time <dbl>, air_volume <dbl>, weight <dbl>,
+## #   imis <dbl>, substance <chr>, result <chr>, uom <fct>, qualifier <chr>,
+## #   year <dbl>, less_than_measurement <lgl>, result_num <dbl>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#examining time distribution by the time{-}weighted data: }
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}}  
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{count =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{mean =} \FunctionTok{mean}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
+    \AttributeTok{median =} \FunctionTok{median}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
+    \AttributeTok{min =} \FunctionTok{min}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
+    \AttributeTok{max =} \FunctionTok{max}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
+    \AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{)}
+\NormalTok{  ) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 3 x 7
+##   eighthr           count   mean median    min      max       sd
+##   <chr>             <int>  <dbl>  <dbl>  <dbl>    <dbl>    <dbl>
+## 1 N                   728 61.7   0.0126 0      4110     301.    
+## 2 STEL CEILING PEAK     8  0.102 0.0988 0.0302    0.195   0.0517
+## 3 Y                  1103 87.2   0.0174 0      5093     382.
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#is there a time{-}trend component to the data that are missing time{-}weighting? }
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(year, eighthr) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\AttributeTok{count =} \FunctionTok{n}\NormalTok{(), }\AttributeTok{.groups =} \StringTok{\textquotesingle{}drop\textquotesingle{}}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{ggplot}\NormalTok{(}\FunctionTok{aes}\NormalTok{(}\AttributeTok{x =}\NormalTok{ year, }\AttributeTok{y =}\NormalTok{ count, }\AttributeTok{fill =}\NormalTok{ eighthr)) }\SpecialCharTok{+}
+  \FunctionTok{geom\_col}\NormalTok{(}\AttributeTok{position =} \StringTok{"dodge"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{labs}\NormalTok{(}\AttributeTok{title =} \StringTok{"Frequency by Year and Eight Hour Classification"}\NormalTok{,}
+       \AttributeTok{x =} \StringTok{"Year"}\NormalTok{,}
+       \AttributeTok{y =} \StringTok{"Count"}\NormalTok{,}
+       \AttributeTok{fill =} \StringTok{"Eight Hour"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{theme\_minimal}\NormalTok{() }\SpecialCharTok{+}
+  \FunctionTok{theme}\NormalTok{(}\AttributeTok{axis.text.x =} \FunctionTok{element\_text}\NormalTok{(}\AttributeTok{angle =} \DecValTok{45}\NormalTok{, }\AttributeTok{hjust =} \DecValTok{1}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+\pandocbounded{\includegraphics[keepaspectratio]{01_Cleaning_files/01_Cleaning_files/figure-latex/unnamed-chunk-11-1.pdf}}
+Looks like we will not be retaining any of the results corresponding to
+the STEL ceiling peak as they have way too short times of duration.
+
+\subsection{Over 6-hours of duration}\label{over-6-hours-of-duration}
+
+Let's create an indicator variable for whether the measurements were
+above 6-hours or not, and take a peek at what data remains:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{six\_hour =}\NormalTok{ time }\SpecialCharTok{\textgreater{}=} \DecValTok{6}\NormalTok{ )}
+
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(six\_hour) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{count =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{mean =} \FunctionTok{mean}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
+    \AttributeTok{median =} \FunctionTok{median}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
+    \AttributeTok{min =} \FunctionTok{min}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
+    \AttributeTok{max =} \FunctionTok{max}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
+    \AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{)) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 3 x 7
+##   six_hour count     mean  median   min    max      sd
+##   <lgl>    <int>    <dbl>   <dbl> <dbl>  <dbl>   <dbl>
+## 1 FALSE      817  76.7     0.0324     0 4110   259.   
+## 2 TRUE       631 126.     16.1        0 5093   523.   
+## 3 NA         391   0.0271  0          0   10.2   0.526
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#what about the observations that are below, are they time{-}weighted? }
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(six\_hour }\SpecialCharTok{\%in\%} \FunctionTok{c}\NormalTok{(}\ConstantTok{FALSE}\NormalTok{, }\ConstantTok{NA}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(six\_hour,eighthr) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 5 x 3
+## # Groups:   six_hour [2]
+##   six_hour eighthr           `n()`
+##   <lgl>    <chr>             <int>
+## 1 FALSE    N                   323
+## 2 FALSE    STEL CEILING PEAK     8
+## 3 FALSE    Y                   486
+## 4 NA       N                   134
+## 5 NA       Y                   257
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#if we only retain measurements over six hours, how much data do we have per year? }
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}}  
+  \FunctionTok{filter}\NormalTok{(six\_hour }\SpecialCharTok{==} \ConstantTok{TRUE}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(year) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{count =} \FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 10 x 2
+##     year count
+##    <dbl> <int>
+##  1  2017    11
+##  2  2018    31
+##  3  2019    40
+##  4  2020    34
+##  5  2021    62
+##  6  2022    48
+##  7  2023    97
+##  8  2024   164
+##  9  2025    93
+## 10  2026    51
+\end{verbatim}
+
+Before we exclude any data, we want to check if we have repeated
+measurements per establishments:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{ full\_sample\_check }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{group\_by}\NormalTok{(establishment) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{n\_obs =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{n\_years =} \FunctionTok{n\_distinct}\NormalTok{(year),}
+    \AttributeTok{.groups =} \StringTok{\textquotesingle{}drop\textquotesingle{}}
+\NormalTok{  )}
+
+\CommentTok{\# Summary stats}
+\NormalTok{full\_sample\_check }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{total\_establishments =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{mean\_obs\_per\_est =} \FunctionTok{mean}\NormalTok{(n\_obs),}
+    \AttributeTok{median\_obs\_per\_est =} \FunctionTok{median}\NormalTok{(n\_obs),}
+    \AttributeTok{est\_with\_5plus =} \FunctionTok{sum}\NormalTok{(n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{5}\NormalTok{),}
+    \AttributeTok{est\_with\_10plus =} \FunctionTok{sum}\NormalTok{(n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{10}\NormalTok{),}
+    \AttributeTok{pct\_5plus =} \FunctionTok{round}\NormalTok{(}\DecValTok{100} \SpecialCharTok{*} \FunctionTok{sum}\NormalTok{(n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{5}\NormalTok{) }\SpecialCharTok{/} \FunctionTok{n}\NormalTok{(), }\DecValTok{1}\NormalTok{),}
+    \AttributeTok{pct\_10plus =} \FunctionTok{round}\NormalTok{(}\DecValTok{100} \SpecialCharTok{*} \FunctionTok{sum}\NormalTok{(n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{10}\NormalTok{) }\SpecialCharTok{/} \FunctionTok{n}\NormalTok{(), }\DecValTok{1}\NormalTok{)}
+\NormalTok{  )  }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 7
+##   total_establishments mean_obs_per_est median_obs_per_est est_with_5plus
+##                  <int>            <dbl>              <int>          <int>
+## 1                  393             4.68                  4            156
+## # i 3 more variables: est_with_10plus <int>, pct_5plus <dbl>, pct_10plus <dbl>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# Distribution}
+\NormalTok{full\_sample\_check }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{ggplot}\NormalTok{(}\FunctionTok{aes}\NormalTok{(}\AttributeTok{x =}\NormalTok{ n\_obs)) }\SpecialCharTok{+}
+  \FunctionTok{geom\_histogram}\NormalTok{(}\AttributeTok{binwidth =} \DecValTok{2}\NormalTok{, }\AttributeTok{fill =} \StringTok{"steelblue"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{geom\_vline}\NormalTok{(}\AttributeTok{xintercept =} \FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{, }\DecValTok{10}\NormalTok{), }\AttributeTok{linetype =} \StringTok{"dashed"}\NormalTok{, }\AttributeTok{color =} \StringTok{"red"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{labs}\NormalTok{(}\AttributeTok{title =} \StringTok{"Distribution of Observations per Establishment (Full Sample)"}\NormalTok{,}
+       \AttributeTok{x =} \StringTok{"Number of Observations"}\NormalTok{,}
+       \AttributeTok{y =} \StringTok{"Number of Establishments"}\NormalTok{) }\SpecialCharTok{+}
+  \FunctionTok{theme\_minimal}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\pandocbounded{\includegraphics[keepaspectratio]{01_Cleaning_files/01_Cleaning_files/figure-latex/unnamed-chunk-13-1.pdf}}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#Restricted sample: }
+\NormalTok{restricted\_sample\_check }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{filter}\NormalTok{(six\_hour }\SpecialCharTok{==} \DecValTok{1}\NormalTok{) }\SpecialCharTok{|\textgreater{}}  \CommentTok{\# or your \textgreater{} 6 hour filter}
+  \FunctionTok{group\_by}\NormalTok{(establishment) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{n\_obs =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{n\_years =} \FunctionTok{n\_distinct}\NormalTok{(year),}
+    \AttributeTok{.groups =} \StringTok{\textquotesingle{}drop\textquotesingle{}}
+\NormalTok{  )}
+
+\NormalTok{restricted\_sample\_check }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{total\_establishments =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{mean\_obs\_per\_est =} \FunctionTok{mean}\NormalTok{(n\_obs),}
+    \AttributeTok{median\_obs\_per\_est =} \FunctionTok{median}\NormalTok{(n\_obs),}
+    \AttributeTok{est\_with\_5plus =} \FunctionTok{sum}\NormalTok{(n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{5}\NormalTok{),}
+    \AttributeTok{est\_with\_10plus =} \FunctionTok{sum}\NormalTok{(n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{10}\NormalTok{),}
+    \AttributeTok{pct\_5plus =} \FunctionTok{round}\NormalTok{(}\DecValTok{100} \SpecialCharTok{*} \FunctionTok{sum}\NormalTok{(n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{5}\NormalTok{) }\SpecialCharTok{/} \FunctionTok{n}\NormalTok{(), }\DecValTok{1}\NormalTok{),}
+    \AttributeTok{pct\_10plus =} \FunctionTok{round}\NormalTok{(}\DecValTok{100} \SpecialCharTok{*} \FunctionTok{sum}\NormalTok{(n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{10}\NormalTok{) }\SpecialCharTok{/} \FunctionTok{n}\NormalTok{(), }\DecValTok{1}\NormalTok{)}
+\NormalTok{  ) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 7
+##   total_establishments mean_obs_per_est median_obs_per_est est_with_5plus
+##                  <int>            <dbl>              <int>          <int>
+## 1                  207             3.05                  3             32
+## # i 3 more variables: est_with_10plus <int>, pct_5plus <dbl>, pct_10plus <dbl>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#summary table }
+\FunctionTok{tribble}\NormalTok{(}
+  \SpecialCharTok{\textasciitilde{}}\NormalTok{criterion, }\SpecialCharTok{\textasciitilde{}}\NormalTok{guideline, }\SpecialCharTok{\textasciitilde{}}\NormalTok{full\_sample, }\SpecialCharTok{\textasciitilde{}}\NormalTok{restricted\_sample,}
+  \StringTok{"Number of establishments"}\NormalTok{, }\StringTok{"≥20{-}30"}\NormalTok{, }\FunctionTok{nrow}\NormalTok{(full\_sample\_check), }\FunctionTok{nrow}\NormalTok{(restricted\_sample\_check),}
+  \StringTok{"\% with 5+ observations"}\NormalTok{, }\StringTok{"\textasciitilde{}80\%+"}\NormalTok{, }
+  \FunctionTok{round}\NormalTok{(}\DecValTok{100} \SpecialCharTok{*} \FunctionTok{sum}\NormalTok{(full\_sample\_check}\SpecialCharTok{$}\NormalTok{n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{5}\NormalTok{) }\SpecialCharTok{/} \FunctionTok{nrow}\NormalTok{(full\_sample\_check), }\DecValTok{1}\NormalTok{),}
+  \FunctionTok{round}\NormalTok{(}\DecValTok{100} \SpecialCharTok{*} \FunctionTok{sum}\NormalTok{(restricted\_sample\_check}\SpecialCharTok{$}\NormalTok{n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{5}\NormalTok{) }\SpecialCharTok{/} \FunctionTok{nrow}\NormalTok{(restricted\_sample\_check), }\DecValTok{1}\NormalTok{),}
+  \StringTok{"\% with 10+ observations"}\NormalTok{, }\StringTok{"\textasciitilde{}50\%+"}\NormalTok{,}
+  \FunctionTok{round}\NormalTok{(}\DecValTok{100} \SpecialCharTok{*} \FunctionTok{sum}\NormalTok{(full\_sample\_check}\SpecialCharTok{$}\NormalTok{n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{10}\NormalTok{) }\SpecialCharTok{/} \FunctionTok{nrow}\NormalTok{(full\_sample\_check), }\DecValTok{1}\NormalTok{),}
+  \FunctionTok{round}\NormalTok{(}\DecValTok{100} \SpecialCharTok{*} \FunctionTok{sum}\NormalTok{(restricted\_sample\_check}\SpecialCharTok{$}\NormalTok{n\_obs }\SpecialCharTok{\textgreater{}=} \DecValTok{10}\NormalTok{) }\SpecialCharTok{/} \FunctionTok{nrow}\NormalTok{(restricted\_sample\_check), }\DecValTok{1}\NormalTok{)}
+\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 3 x 4
+##   criterion                guideline full_sample restricted_sample
+##   <chr>                    <chr>           <dbl>             <dbl>
+## 1 Number of establishments ≥20-30          393               207  
+## 2 % with 5+ observations   ~80%+            39.7              15.5
+## 3 % with 10+ observations  ~50%+             5.6               1
+\end{verbatim}
+
+We do not meet the assumptions of LMEM according to
+\href{https://ladal.edu.au/tutorials/mixedmodel/mixedmodel.html}{this
+article}, which details that we need 5-10 observations per random-effect
+level for reliable variance estimates, and at least 20-30 random-effect
+levels.
+
+It is recommended that no matter what, we apply cluster-robust standard
+errors to account for within-group variation. To deal with this, we are
+going to plan on fitting a generalized linear mixed model that adds a
+cluster-specific random effect to the linear predictor. Our cluster
+variable will be id.
+
+\end{document}

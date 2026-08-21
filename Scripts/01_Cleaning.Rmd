@@ -6,9 +6,13 @@ output:
     toc_depth: 3
     number_sections: true
     toc_float: true 
-output_dir: Output 
+    code_folding: hide  
+  pdf_document:
+    toc: true
+    toc_depth: '3' 
+output_dir: Output
 --- 
-```{r setup}
+```{r setup, include = FALSE}
 # Load packages
 library(tidyverse)
 library(ggplot2) 
@@ -47,7 +51,14 @@ head(dat)
 tail(dat)
 ``` 
 
+
 There are a couple of formatting tasks we need to take care of. We want to convert our data into the proper formats, and there are several variables included in the dataset that we will not need (Office, NAICS, Date_Reported, Lab_Number, CSHO). 
+
+We want to achieve the following: 
+- Convert 'result' to be numeric. *Note:* some of these values are recorded as > measurement. To deal with this, we will make a new variable, `result_num` that will report whatever number is associated with the measurement. Another variable, `less_than_measurement`, will indicate whether the variable was "less than" or not.  
+- Convert date to an R date format 
+- Create a new variable that just contains the year of sample 
+- Converting `time` to be in terms of hours, not minutes
 
 Convert result to numeric, check how many are blanks? Also check how many are per sample type and make into nicer format. Check how many went in and used eight hour TWA calculation too. Changing time to be in terms of hours instead of minutes. Adding indicator in case of data being "less than" values, so we can go back in and perhaps do a sensitivity analysis of some kind or just have the knowledge that they were less than that number.
 
@@ -57,7 +68,8 @@ To start, let's simply apply some reformats to our data:
 dat <- dat |> 
   rename_with(tolower) |> 
   mutate(
-    date_sampled = dmy(date_sampled),
+    date_sampled = dmy(date_sampled), 
+    year = year(date_sampled),
          type = fct_recode(type,
                           "Personal" = "P",
                           "Area" = "A",
@@ -65,13 +77,90 @@ dat <- dat |>
                           "Wipe" = "W"), 
     blank = as.logical(blank),
     time = time/60,
-    censored = grepl("^\\s*<", result),
+    less_than_measurement = grepl("^\\s*<", result),
     result_num = as.numeric(gsub("<\\s*", "", result))
     ) |> 
   select(-office, -naics, -date_reported, -lab_number, -csho, -sic)
 ```
 
-# Inclusion/Exclusion 
+## Examination 
+
+We want to check some of these variables to see whether they are relevant to be included (i.e., contain multiple levels). 
+
+Let's check what different values are in the data for `instrument`, `blank`, `weight`, and `uom`. 
+
+```{r}
+dat |> 
+  group_by(instrument) |> 
+  summarize(n()) 
+dat |> 
+  group_by(blank) |> 
+  summarize(n()) 
+
+summary(dat$weight)
+
+dat |> 
+  group_by(uom) |> 
+  summarize(n()) 
+``` 
+It looks like we only have NA values for instrument and blank; we can drop. We do have information for weight that may be needed. 
+
+For the unit of measurement, according to the data dictionary, M = mg/m^3, X = micrograms, Y = milligrams. We have 56 NAs which we will need to explore -- it is possible it corresponds to values that contain sample weight and a result, from which we will need to complete some calculations. 
+
+Let's check to see what the NA values correspond to before we reformat the uom variable. 
+
+```{r}
+dat |> 
+  filter(is.na(uom)) |> 
+  select(weight, result_num, qualifier, air_volume)
+```
+
+This is interesting, since we have measurements for weight, but we don't know what unit the sample is in for the bulks and silica samples. We are likely unable to use these observations.  
+
+Another important aspect is that we have some units of measurement that are simply micrograms, and milligrams, without being accompanied with the air volume. Let's check and make sure that all of these instances correspond to an air volume value. If they are all complete, we will need to look into converting the air volume (liters) to meters cubed. 
+
+```{r}
+dat |> 
+  filter(uom == c("M", "MG", "X", "Y")) |> 
+  select(uom, air_volume) |>
+  group_by(uom) |>
+  summarise(
+    total_rows = n(),
+    non_na_values = sum(!is.na(air_volume)),
+    na_count = sum(is.na(air_volume))
+  )
+```
+It appears that we have some data that is missing air volume specifically. We will need to double check which rows are missing air volume after we exclude non-personal samples, and then look into creating a standardized measurement.
+
+
+Let's apply some reformatting again with the new information.   
+ M = mg/m^3, X = micrograms, Y = milligrams.
+
+```{r}
+dat <- dat |> 
+  select(-instrument, -blank) |> 
+  mutate(
+    uom = fct_recode(uom,
+                          "mg" = "MG", #milligrams
+                          "mg" = "Y", #milligrams
+                          "mcg" = "X", #micrograms
+                          "mcg/m3" = "MCG/M3", #micrograms/m3
+                          "mg/m3" = "MG_M3", #milligrams/m3
+                          "mg/m3" = "M" #milligrams/m3
+                     )
+    )
+  
+
+dat |> 
+  group_by(uom) |> 
+  summarize(n())
+```
+
+
+
+# Inclusion/Exclusion  
+
+## Personal Measurements
 
 To start, we have 2,135 observations. Next, we want to restrict our sample to only those pertaining to personal measurements. 
 
@@ -88,5 +177,210 @@ dat <- dat |>
   filter(type == "Personal")
 ```
 
+Now that we've excluded some samples, let's go back in and see how the air volume data fits or doesn't: 
 
-Next, we want to get an idea of how our samples may differ depending on how many of them used a time-weighted average.
+```{r}
+dat |> 
+  filter(uom %in% c("mg", "mcg")) |> 
+  select(uom, air_volume) |>
+  group_by(uom) |>
+  summarise(
+    total_rows = n(),
+    non_na_values = sum(!is.na(air_volume)),
+    na_count = sum(is.na(air_volume))
+  )
+``` 
+
+Let's also check to see the distribution of samples by year: 
+
+```{r}
+dat |> 
+  group_by(year) |> 
+  summarize(count = n()) |> 
+  mutate(percent = (count/sum(count))*100)
+```
+*Note:* after excluding non-personal samples, we no longer have values that are in milligrams. 
+
+We are left with the resulting microgram observations, which do appear as though they are all lacking data on air volume. 
+
+Let's do one last check, as it is possible that these values correspond to the time-weighted average: 
+
+```{r}
+dat |> 
+  filter(uom == "mcg") |> 
+  select(eighthr) |> 
+  group_by(eighthr) |> 
+  summarize(n()) 
+
+dat |> 
+  filter(uom =="mcg" & eighthr == "N") |> 
+  group_by(qualifier) |> 
+  summarize(n()) 
+
+dat |> 
+  filter(uom =="mcg" & eighthr == "N") |> 
+  group_by(air_volume) |>
+  summarise(
+    total_rows = n(),
+    non_na_values = sum(!is.na(air_volume)),
+    na_count = sum(is.na(air_volume))
+  )
+
+dat |> 
+  filter(uom =="mcg" & eighthr == "N") |> 
+  select(result_num) |> 
+  summary() 
+
+dat |> 
+  filter(uom =="mcg" & eighthr == "Y") |> 
+  select(result_num) |> 
+  summary()
+```
+Ok, we have figured out what happened --> specifically the measurements that aren't standardized to volume all contains results less than the quantification limit or are blank. 
+
+
+## Time-weighted average observations 
+
+Next, we want to get an idea of how our samples may differ depending on how many of them used a time-weighted average. 
+
+```{r}
+dat |> 
+  group_by(eighthr) |> 
+  summarize(n()) 
+
+dat |> 
+  filter(eighthr == "STEL CEILING PEAK") |>
+  select(everything())  # STEL information 
+
+#examining time distribution by the time-weighted data: 
+dat |> 
+  group_by(eighthr) |>  
+  summarise(
+    count = n(),
+    mean = mean(result_num, na.rm = TRUE),
+    median = median(result_num, na.rm = TRUE),
+    min = min(result_num, na.rm = TRUE),
+    max = max(result_num, na.rm = TRUE),
+    sd = sd(result_num, na.rm = TRUE)
+  ) 
+
+#is there a time-trend component to the data that are missing time-weighting? 
+dat |> 
+  group_by(year, eighthr) |> 
+  summarize(count = n(), .groups = 'drop') |>
+  ggplot(aes(x = year, y = count, fill = eighthr)) +
+  geom_col(position = "dodge") +
+  labs(title = "Frequency by Year and Eight Hour Classification",
+       x = "Year",
+       y = "Count",
+       fill = "Eight Hour") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+``` 
+Looks like we will not be retaining any of the results corresponding to the STEL ceiling peak as they have way too short times of duration. 
+
+
+## Over 6-hours of duration 
+
+Let's create an indicator variable for whether the measurements were above 6-hours or not, and take a peek at what data remains: 
+
+```{r}
+dat <- dat |> 
+  mutate(six_hour = time >= 6 )
+
+dat |> 
+  group_by(six_hour) |> 
+  summarise(
+    count = n(),
+    mean = mean(result_num, na.rm = TRUE),
+    median = median(result_num, na.rm = TRUE),
+    min = min(result_num, na.rm = TRUE),
+    max = max(result_num, na.rm = TRUE),
+    sd = sd(result_num, na.rm = TRUE)) 
+
+#what about the observations that are below, are they time-weighted? 
+dat |> 
+  filter(six_hour %in% c(FALSE, NA)) |> 
+  group_by(six_hour,eighthr) |> 
+  summarise(n()) 
+
+#if we only retain measurements over six hours, how much data do we have per year? 
+dat |>  
+  filter(six_hour == TRUE) |> 
+  group_by(year) |> 
+  summarise(
+    count = n()) 
+``` 
+
+Before we exclude any data, we want to check if we have repeated measurements per establishments: 
+
+```{r}
+ full_sample_check <- dat |>
+  group_by(establishment) |>
+  summarise(
+    n_obs = n(),
+    n_years = n_distinct(year),
+    .groups = 'drop'
+  )
+
+# Summary stats
+full_sample_check |>
+  summarise(
+    total_establishments = n(),
+    mean_obs_per_est = mean(n_obs),
+    median_obs_per_est = median(n_obs),
+    est_with_5plus = sum(n_obs >= 5),
+    est_with_10plus = sum(n_obs >= 10),
+    pct_5plus = round(100 * sum(n_obs >= 5) / n(), 1),
+    pct_10plus = round(100 * sum(n_obs >= 10) / n(), 1)
+  )  
+
+# Distribution
+full_sample_check |>
+  ggplot(aes(x = n_obs)) +
+  geom_histogram(binwidth = 2, fill = "steelblue") +
+  geom_vline(xintercept = c(5, 10), linetype = "dashed", color = "red") +
+  labs(title = "Distribution of Observations per Establishment (Full Sample)",
+       x = "Number of Observations",
+       y = "Number of Establishments") +
+  theme_minimal() 
+
+#Restricted sample: 
+restricted_sample_check <- dat |>
+  filter(six_hour == 1) |>  # or your > 6 hour filter
+  group_by(establishment) |>
+  summarise(
+    n_obs = n(),
+    n_years = n_distinct(year),
+    .groups = 'drop'
+  )
+
+restricted_sample_check |>
+  summarise(
+    total_establishments = n(),
+    mean_obs_per_est = mean(n_obs),
+    median_obs_per_est = median(n_obs),
+    est_with_5plus = sum(n_obs >= 5),
+    est_with_10plus = sum(n_obs >= 10),
+    pct_5plus = round(100 * sum(n_obs >= 5) / n(), 1),
+    pct_10plus = round(100 * sum(n_obs >= 10) / n(), 1)
+  ) 
+
+#summary table 
+tribble(
+  ~criterion, ~guideline, ~full_sample, ~restricted_sample,
+  "Number of establishments", "≥20-30", nrow(full_sample_check), nrow(restricted_sample_check),
+  "% with 5+ observations", "~80%+", 
+  round(100 * sum(full_sample_check$n_obs >= 5) / nrow(full_sample_check), 1),
+  round(100 * sum(restricted_sample_check$n_obs >= 5) / nrow(restricted_sample_check), 1),
+  "% with 10+ observations", "~50%+",
+  round(100 * sum(full_sample_check$n_obs >= 10) / nrow(full_sample_check), 1),
+  round(100 * sum(restricted_sample_check$n_obs >= 10) / nrow(restricted_sample_check), 1)
+)
+``` 
+
+We do not meet the assumptions of LMEM according to [this article](https://ladal.edu.au/tutorials/mixedmodel/mixedmodel.html), which details that we need 5-10 observations per random-effect level for reliable variance estimates, and at least 20-30 random-effect levels. 
+
+It is recommended that no matter what, we apply cluster-robust standard errors to account for within-group variation. To deal with this, we are going to plan on fitting a generalized linear mixed model that adds a cluster-specific random effect to the linear predictor. Our cluster variable will be id. 
+
+

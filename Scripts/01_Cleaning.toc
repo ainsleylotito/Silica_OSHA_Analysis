@@ -1,0 +1,7 @@
+\contentsline {section}{Introduction}{2}{section*.2}%
+\contentsline {section}{Data Import and Initial Examination}{2}{section*.3}%
+\contentsline {subsection}{Examination}{3}{section*.4}%
+\contentsline {section}{Inclusion/Exclusion}{5}{section*.5}%
+\contentsline {subsection}{Personal Measurements}{5}{section*.6}%
+\contentsline {subsection}{Time-weighted average observations}{8}{section*.7}%
+\contentsline {subsection}{Over 6-hours of duration}{10}{section*.8}%
