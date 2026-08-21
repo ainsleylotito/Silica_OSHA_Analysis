@@ -1591,10 +1591,10 @@ is above or below.</p></li>
 <div id="data-import-and-initial-examination" class="section level1" number="2">
 <h1><span class="header-section-number">2</span> Data Import and Initial
 Examination</h1>
-<pre class="r"><code>dat &lt;- read_delim(&quot;../RawData/Respirable_Silica_Data.txt&quot;, delim = &quot;|&quot;) 
-glimpse(dat)
-head(dat) 
-tail(dat)</code></pre>
+<pre class="r"><code>raw_dat &lt;- read_delim(&quot;../RawData/Respirable_Silica_Data.txt&quot;, delim = &quot;|&quot;) 
+glimpse(raw_dat)
+head(raw_dat) 
+tail(raw_dat)</code></pre>
 <p>There are a couple of formatting tasks we need to take care of. We
 want to convert our data into the proper formats, and there are several
 variables included in the dataset that we will not need (Office, NAICS,
@@ -1616,7 +1616,7 @@ of hours instead of minutes. Adding indicator in case of data being
 analysis of some kind or just have the knowledge that they were less
 than that number.</p>
 <p>To start, let’s simply apply some reformats to our data:</p>
-<pre class="r"><code>dat &lt;- dat |&gt; 
+<pre class="r"><code>dat &lt;- raw_dat |&gt; 
   rename_with(tolower) |&gt; 
   mutate(
     date_sampled = dmy(date_sampled), 
@@ -1634,6 +1634,9 @@ than that number.</p>
   select(-office, -naics, -date_reported, -lab_number, -csho, -sic)</code></pre>
 <div id="examination" class="section level2" number="2.1">
 <h2><span class="header-section-number">2.1</span> Examination</h2>
+<p>Let’s first see how many years our data spans:</p>
+<pre class="r"><code>range(dat$date_sampled)</code></pre>
+<pre><code>## [1] &quot;2017-08-18&quot; &quot;2026-05-14&quot;</code></pre>
 <p>We want to check some of these variables to see whether they are
 relevant to be included (i.e., contain multiple levels).</p>
 <p>Let’s check what different values are in the data for
@@ -1814,7 +1817,8 @@ have values that are in milligrams.</p>
 appear as though they are all lacking data on air volume.</p>
 <p>Let’s do one last check, as it is possible that these values
 correspond to the time-weighted average:</p>
-<pre class="r"><code>dat |&gt; 
+<pre class="r"><code>#TWA groupings for just instances where unit of measurement is mcg
+dat |&gt; 
   filter(uom == &quot;mcg&quot;) |&gt; 
   select(eighthr) |&gt; 
   group_by(eighthr) |&gt; 
@@ -1859,7 +1863,7 @@ correspond to the time-weighted average:</p>
 <pre class="r"><code>dat |&gt; 
   filter(uom ==&quot;mcg&quot; &amp; eighthr == &quot;Y&quot;) |&gt; 
   select(result_num) |&gt; 
-  summary()</code></pre>
+  summary() </code></pre>
 <pre><code>##    result_num      
 ##  Min.   : 0.00000  
 ##  1st Qu.: 0.00000  
@@ -1870,6 +1874,257 @@ correspond to the time-weighted average:</p>
 <p>Ok, we have figured out what happened –&gt; specifically the
 measurements that aren’t standardized to volume all contains results
 less than the quantification limit or are blank.</p>
+<p>Next, we want to scrutinize our observations that are a time-weighted
+average and are coded as “mcg” for the unit. Let’s see what these
+measurements actually are:</p>
+<pre class="r"><code>mcg_time_weighted &lt;- dat |&gt; 
+  filter(uom ==&quot;mcg&quot; &amp; eighthr == &quot;Y&quot;)  
+
+mcg_time_weighted |&gt; 
+  select(result_num) |&gt; 
+  summary() </code></pre>
+<pre><code>##    result_num      
+##  Min.   : 0.00000  
+##  1st Qu.: 0.00000  
+##  Median : 0.00000  
+##  Mean   : 0.04304  
+##  3rd Qu.: 0.00000  
+##  Max.   :10.20000</code></pre>
+<pre class="r"><code>#comparing to summary of observations that aren&#39;t time-weighted and are coded as &quot;mcg/m3&quot; -- 491 observations
+dat |&gt; 
+  filter(uom == &quot;mcg/m3&quot; &amp; eighthr == &quot;N&quot;) |&gt; 
+  select(result_num) |&gt; 
+  summary()</code></pre>
+<pre><code>##    result_num    
+##  Min.   :   0.0  
+##  1st Qu.:   0.0  
+##  Median :   0.0  
+##  Mean   :  85.4  
+##  3rd Qu.:  47.9  
+##  Max.   :4110.0</code></pre>
+<pre class="r"><code>#comparing to those that ARE time-weighted and coded as &quot;mcg/m3&quot; -- 737 observations
+dat |&gt; 
+  filter(uom == &quot;mcg/m3&quot; &amp; eighthr == &quot;Y&quot;) |&gt;  
+  select(result_num) |&gt; 
+  summary()</code></pre>
+<pre><code>##    result_num    
+##  Min.   :   0.0  
+##  1st Qu.:   0.0  
+##  Median :  22.0  
+##  Mean   : 127.5  
+##  3rd Qu.:  69.3  
+##  Max.   :5093.0</code></pre>
+<p>We want to go further, tracking if there are overlapping sampling
+numbers appear across these groups:</p>
+<pre class="r"><code>mcg_tw    &lt;- dat |&gt; filter(uom == &quot;mcg&quot; &amp; eighthr == &quot;Y&quot;)     |&gt; mutate(group = &quot;mcg_TW&quot;)
+m3_no_tw  &lt;- dat |&gt; filter(uom == &quot;mcg/m3&quot; &amp; eighthr == &quot;N&quot;)  |&gt; mutate(group = &quot;m3_notTW&quot;)
+m3_tw     &lt;- dat |&gt; filter(uom == &quot;mcg/m3&quot; &amp; eighthr == &quot;Y&quot;)  |&gt; mutate(group = &quot;m3_TW&quot;)
+
+all_three &lt;- bind_rows(mcg_tw, m3_no_tw, m3_tw)
+
+# How many SAMPLING_NUMBERs appear in more than one group?
+overlap_check &lt;- all_three |&gt; 
+  group_by(sampling_number) |&gt; 
+  summarise(
+    n_obs = n(),
+    n_field_numbers = n_distinct(field_number),
+    n_groups = n_distinct(group),
+    groups_present = paste(sort(unique(group)), collapse = &quot;, &quot;),
+    .groups = &quot;drop&quot;
+  ) |&gt; 
+  filter(n_groups &gt; 1)
+
+overlap_check</code></pre>
+<pre><code>## # A tibble: 209 × 5
+##    sampling_number n_obs n_field_numbers n_groups groups_present
+##    &lt;chr&gt;           &lt;int&gt;           &lt;int&gt;    &lt;int&gt; &lt;chr&gt;         
+##  1 374920              2               2        2 m3_TW, mcg_TW 
+##  2 376325              2               2        2 m3_TW, mcg_TW 
+##  3 377547              2               2        2 m3_TW, mcg_TW 
+##  4 385245              2               2        2 m3_TW, mcg_TW 
+##  5 404284              3               3        2 m3_TW, mcg_TW 
+##  6 404289              3               3        2 m3_TW, mcg_TW 
+##  7 416220              4               2        2 m3_TW, mcg_TW 
+##  8 416221              4               2        2 m3_TW, mcg_TW 
+##  9 416548              4               2        2 m3_TW, mcg_TW 
+## 10 423655              6               3        2 m3_TW, mcg_TW 
+## # ℹ 199 more rows</code></pre>
+<pre class="r"><code>all_three |&gt; 
+  arrange(sampling_number, field_number) |&gt; 
+  select(sampling_number, field_number, uom, eighthr, result_num, group) |&gt; 
+  filter(sampling_number %in% overlap_check$sampling_number) </code></pre>
+<pre><code>## # A tibble: 507 × 6
+##    sampling_number field_number uom    eighthr result_num group 
+##    &lt;chr&gt;           &lt;chr&gt;        &lt;fct&gt;  &lt;chr&gt;        &lt;dbl&gt; &lt;chr&gt; 
+##  1 374920          07009E       mcg/m3 Y              749 m3_TW 
+##  2 374920          07632E       mcg    Y                0 mcg_TW
+##  3 376325          01241D       mcg    Y                0 mcg_TW
+##  4 376325          01488D       mcg/m3 Y                0 m3_TW 
+##  5 377547          05890D       mcg/m3 Y              476 m3_TW 
+##  6 377547          Y5571        mcg    Y                0 mcg_TW
+##  7 385245          01280D       mcg    Y                0 mcg_TW
+##  8 385245          08093D       mcg/m3 Y              604 m3_TW 
+##  9 404284          02523D       mcg    Y                0 mcg_TW
+## 10 404284          02530D       mcg/m3 Y                0 m3_TW 
+## # ℹ 497 more rows</code></pre>
+<pre class="r"><code>all_three |&gt; 
+  group_by(field_number) |&gt; 
+  summarise(
+    n_obs = n(),
+    n_groups = n_distinct(group),
+    .groups = &quot;drop&quot;
+  ) |&gt; 
+  filter(n_groups &gt; 1)</code></pre>
+<pre><code>## # A tibble: 0 × 3
+## # ℹ 3 variables: field_number &lt;chr&gt;, n_obs &lt;int&gt;, n_groups &lt;int&gt;</code></pre>
+<p>How many sampling numbers have TWA record:</p>
+<pre class="r"><code># does this SAMPLING_NUMBER have an eighthr == &quot;Y&quot; record at all (regardless of uom)?
+twa_lookup &lt;- dat |&gt; 
+  group_by(sampling_number) |&gt; 
+  summarise(
+    has_twa = any(eighthr == &quot;Y&quot;),
+    n_twa_records = sum(eighthr == &quot;Y&quot;),
+    n_component_records = sum(eighthr == &quot;N&quot;),
+    .groups = &quot;drop&quot;
+  )
+
+twa_lookup |&gt; count(has_twa, n_twa_records)</code></pre>
+<pre><code>## # A tibble: 6 × 3
+##   has_twa n_twa_records     n
+##   &lt;lgl&gt;           &lt;int&gt; &lt;int&gt;
+## 1 FALSE               0   459
+## 2 TRUE                1   334
+## 3 TRUE                2   247
+## 4 TRUE                3    35
+## 5 TRUE                4    35
+## 6 TRUE                6     5</code></pre>
+<p>Join back into records to see which are “covered” by a time weighted
+average:</p>
+<pre class="r"><code>mcg_components &lt;- dat |&gt; 
+  filter(uom == &quot;mcg&quot; &amp; eighthr == &quot;N&quot;) |&gt; 
+  left_join(twa_lookup, by = &quot;sampling_number&quot;)
+
+# how many of these component records belong to a sampling number that DOES have a TWA?
+mcg_components |&gt; 
+  count(has_twa)</code></pre>
+<pre><code>## # A tibble: 1 × 2
+##   has_twa     n
+##   &lt;lgl&gt;   &lt;int&gt;
+## 1 FALSE      62</code></pre>
+<p>Looking at multiple TWA samples</p>
+<pre class="r"><code>dat |&gt; 
+  filter(eighthr == &quot;Y&quot;) |&gt; 
+  group_by(sampling_number) |&gt; 
+  filter(n() &gt; 1) |&gt; 
+  select(sampling_number, field_number, uom, result_num, time) |&gt;  
+  arrange(sampling_number) |&gt; 
+  print(n = 30) </code></pre>
+<pre><code>## # A tibble: 769 × 5
+## # Groups:   sampling_number [322]
+##    sampling_number field_number uom    result_num  time
+##    &lt;chr&gt;           &lt;chr&gt;        &lt;fct&gt;       &lt;dbl&gt; &lt;dbl&gt;
+##  1 306812          9130A        mcg/m3        0   NA   
+##  2 306812          8559A        mcg/m3        0    8.08
+##  3 315692          2218A        mcg/m3        0    7.57
+##  4 315692          8631A        mcg/m3        0   NA   
+##  5 325663          03289D       mcg/m3      195    2.43
+##  6 325663          02857D       mcg/m3      948    4.92
+##  7 325665          03294D       mcg/m3      993    5   
+##  8 325665          03305D       mcg/m3      227    2.42
+##  9 325669          03283D       mcg/m3      947    4.92
+## 10 325669          02832D       mcg/m3        0    2.42
+## 11 325676          03273D       mcg/m3        0   NA   
+## 12 325676          02855D       mcg/m3      274    5   
+## 13 325676          02839D       mcg/m3        0    2.28
+## 14 332668          00022E       mcg/m3        0   NA   
+## 15 332668          07714D       mcg/m3        0    7.73
+## 16 333357          07758E       mcg/m3     1133    4.67
+## 17 333357          07694E       mcg/m3     1550    2.25
+## 18 333357          07958E       mcg/m3        0   NA   
+## 19 333410          04900E       mcg/m3      242.   4.83
+## 20 333410          04924E       mcg/m3        0   NA   
+## 21 335204          05889C       mcg/m3       44.2  7.08
+## 22 335204          03025E       mcg/m3        0   NA   
+## 23 335797          05690D       mcg/m3        0    6.3 
+## 24 335797          05848D       mcg/m3        0   NA   
+## 25 343074          02677E       mcg/m3        0   NA   
+## 26 343074          02852D       mcg/m3     1500    4.95
+## 27 343096          03764E       mcg/m3        0   NA   
+## 28 343096          02666E       mcg/m3       23.6  7.77
+## 29 347177          02780D       mcg/m3        0   NA   
+## 30 347177          03549E       mcg/m3       71.7  8   
+## # ℹ 739 more rows</code></pre>
+<pre class="r"><code>#check for 8-hr calculation: 
+check_calc_status &lt;- dat |&gt; 
+  filter(eighthr == &quot;Y&quot; &amp; uom == &quot;mcg/m3&quot;) |&gt; 
+  group_by(sampling_number) |&gt; 
+  summarise(
+    n_components = n(),
+    n_distinct_results = n_distinct(result_num),
+    all_results_identical = n_distinct(result_num) == 1,
+    total_time = sum(time, na.rm = TRUE),
+    .groups = &quot;drop&quot;
+  )
+
+# Summary: how many sampling numbers have identical vs differing result_num across components?
+check_calc_status |&gt; 
+  filter(n_components &gt; 1) |&gt;   # only relevant for sampling numbers with multiple media
+  count(all_results_identical) </code></pre>
+<pre><code>## # A tibble: 2 × 2
+##   all_results_identical     n
+##   &lt;lgl&gt;                 &lt;int&gt;
+## 1 FALSE                    62
+## 2 TRUE                     88</code></pre>
+<pre class="r"><code># For sampling numbers with &gt;1 component, does a duration-weighted average of the
+# individual result_num values recreate any single one of them, or land somewhere in between?
+check_calc_status_detail &lt;- dat |&gt; 
+  filter(eighthr == &quot;Y&quot; &amp; uom == &quot;mcg/m3&quot;) |&gt; 
+  group_by(sampling_number) |&gt; 
+  filter(n() &gt; 1) |&gt; 
+  summarise(
+    results = paste(round(result_num, 1), collapse = &quot;, &quot;),
+    times = paste(round(time, 2), collapse = &quot;, &quot;),
+    computed_twa = sum(result_num * time, na.rm = TRUE) / sum(time, na.rm = TRUE),
+    .groups = &quot;drop&quot;
+  )
+
+check_calc_status_detail </code></pre>
+<pre><code>## # A tibble: 150 × 4
+##    sampling_number results       times          computed_twa
+##    &lt;chr&gt;           &lt;chr&gt;         &lt;chr&gt;                 &lt;dbl&gt;
+##  1 306812          0, 0          NA, 8.08                0  
+##  2 315692          0, 0          7.57, NA                0  
+##  3 325663          195, 948      2.43, 4.92            699. 
+##  4 325665          993, 227      5, 2.42               743. 
+##  5 325669          947, 0        4.92, 2.42            635. 
+##  6 325676          0, 274, 0     NA, 5, 2.28           188. 
+##  7 332668          0, 0          NA, 7.73                0  
+##  8 333357          1133, 1550, 0 4.67, 2.25, NA       1269. 
+##  9 333410          242.2, 0      4.83, NA              242. 
+## 10 335204          44.2, 0       7.08, NA               44.2
+## # ℹ 140 more rows</code></pre>
+<pre class="r"><code>check_calc_status2 &lt;- dat |&gt; 
+  filter(eighthr == &quot;Y&quot; &amp; uom == &quot;mcg/m3&quot;) |&gt; 
+  group_by(sampling_number) |&gt; 
+  summarise(
+    n_components = n(),
+    n_distinct_results = n_distinct(result_num),
+    all_results_identical = n_distinct(result_num) == 1,
+    all_results_zero = all(result_num == 0),
+    total_time = sum(time, na.rm = TRUE),
+    .groups = &quot;drop&quot;
+  )
+
+# Break the &quot;identical&quot; bucket into trivial-zero vs genuine non-zero matches
+check_calc_status2 |&gt; 
+  filter(n_components &gt; 1) |&gt; 
+  count(all_results_identical, all_results_zero)</code></pre>
+<pre><code>## # A tibble: 3 × 3
+##   all_results_identical all_results_zero     n
+##   &lt;lgl&gt;                 &lt;lgl&gt;            &lt;int&gt;
+## 1 FALSE                 FALSE               62
+## 2 TRUE                  FALSE               32
+## 3 TRUE                  TRUE                56</code></pre>
 </div>
 <div id="time-weighted-average-observations" class="section level2" number="3.2">
 <h2><span class="header-section-number">3.2</span> Time-weighted average

@@ -45,10 +45,10 @@ New variables created during the cleaning process, as well as a description of a
 # Data Import and Initial Examination
 
 ```{r import_data, results= FALSE}
-dat <- read_delim("../RawData/Respirable_Silica_Data.txt", delim = "|") 
-glimpse(dat)
-head(dat) 
-tail(dat)
+raw_dat <- read_delim("../RawData/Respirable_Silica_Data.txt", delim = "|") 
+glimpse(raw_dat)
+head(raw_dat) 
+tail(raw_dat)
 ``` 
 
 
@@ -65,7 +65,7 @@ Convert result to numeric, check how many are blanks? Also check how many are pe
 To start, let's simply apply some reformats to our data: 
 
 ```{r}
-dat <- dat |> 
+dat <- raw_dat |> 
   rename_with(tolower) |> 
   mutate(
     date_sampled = dmy(date_sampled), 
@@ -83,7 +83,13 @@ dat <- dat |>
   select(-office, -naics, -date_reported, -lab_number, -csho, -sic)
 ```
 
-## Examination 
+## Examination  
+
+Let's first see how many years our data spans: 
+
+```{r}
+range(dat$date_sampled)
+```
 
 We want to check some of these variables to see whether they are relevant to be included (i.e., contain multiple levels). 
 
@@ -205,7 +211,8 @@ We are left with the resulting microgram observations, which do appear as though
 
 Let's do one last check, as it is possible that these values correspond to the time-weighted average: 
 
-```{r}
+```{r} 
+#TWA groupings for just instances where unit of measurement is mcg
 dat |> 
   filter(uom == "mcg") |> 
   select(eighthr) |> 
@@ -234,10 +241,170 @@ dat |>
 dat |> 
   filter(uom =="mcg" & eighthr == "Y") |> 
   select(result_num) |> 
-  summary()
-```
-Ok, we have figured out what happened --> specifically the measurements that aren't standardized to volume all contains results less than the quantification limit or are blank. 
+  summary() 
 
+```
+Ok, we have figured out what happened --> specifically the measurements that aren't standardized to volume all contains results less than the quantification limit or are blank.  
+
+Next, we want to scrutinize our observations that are a time-weighted average and are coded as "mcg" for the unit. Let's see what these measurements actually are:  
+```{r}
+mcg_time_weighted <- dat |> 
+  filter(uom =="mcg" & eighthr == "Y")  
+
+mcg_time_weighted |> 
+  select(result_num) |> 
+  summary() 
+
+#comparing to summary of observations that aren't time-weighted and are coded as "mcg/m3" -- 491 observations
+dat |> 
+  filter(uom == "mcg/m3" & eighthr == "N") |> 
+  select(result_num) |> 
+  summary()
+
+#comparing to those that ARE time-weighted and coded as "mcg/m3" -- 737 observations
+dat |> 
+  filter(uom == "mcg/m3" & eighthr == "Y") |>  
+  select(result_num) |> 
+  summary()
+``` 
+
+We want to go further, tracking if there are overlapping sampling numbers appear across these groups: 
+```{r}
+mcg_tw    <- dat |> filter(uom == "mcg" & eighthr == "Y")     |> mutate(group = "mcg_TW")
+m3_no_tw  <- dat |> filter(uom == "mcg/m3" & eighthr == "N")  |> mutate(group = "m3_notTW")
+m3_tw     <- dat |> filter(uom == "mcg/m3" & eighthr == "Y")  |> mutate(group = "m3_TW")
+
+all_three <- bind_rows(mcg_tw, m3_no_tw, m3_tw)
+
+# How many SAMPLING_NUMBERs appear in more than one group?
+overlap_check <- all_three |> 
+  group_by(sampling_number) |> 
+  summarise(
+    n_obs = n(),
+    n_field_numbers = n_distinct(field_number),
+    n_groups = n_distinct(group),
+    groups_present = paste(sort(unique(group)), collapse = ", "),
+    .groups = "drop"
+  ) |> 
+  filter(n_groups > 1)
+
+overlap_check
+
+all_three |> 
+  arrange(sampling_number, field_number) |> 
+  select(sampling_number, field_number, uom, eighthr, result_num, group) |> 
+  filter(sampling_number %in% overlap_check$sampling_number) 
+
+all_three |> 
+  group_by(field_number) |> 
+  summarise(
+    n_obs = n(),
+    n_groups = n_distinct(group),
+    .groups = "drop"
+  ) |> 
+  filter(n_groups > 1)
+```
+How many sampling numbers have TWA record:  
+```{r}
+# does this SAMPLING_NUMBER have an eighthr == "Y" record at all (regardless of uom)?
+twa_lookup <- dat |> 
+  group_by(sampling_number) |> 
+  summarise(
+    has_twa = any(eighthr == "Y"),
+    n_twa_records = sum(eighthr == "Y"),
+    n_component_records = sum(eighthr == "N"),
+    .groups = "drop"
+  )
+
+twa_lookup |> count(has_twa, n_twa_records)
+```
+
+Join back into records to see which are "covered" by a time weighted average:  
+```{r}
+mcg_components <- dat |> 
+  filter(uom == "mcg" & eighthr == "N") |> 
+  left_join(twa_lookup, by = "sampling_number")
+
+# how many of these component records belong to a sampling number that DOES have a TWA?
+mcg_components |> 
+  count(has_twa)
+```
+Looking at multiple TWA samples
+```{r}
+dat |> 
+  filter(eighthr == "Y") |> 
+  group_by(sampling_number) |> 
+  filter(n() > 1) |> 
+  select(sampling_number, field_number, uom, result_num, time) |>  
+  arrange(sampling_number) |> 
+  print(n = 30) 
+
+
+#check for 8-hr calculation: 
+check_calc_status <- dat |> 
+  filter(eighthr == "Y" & uom == "mcg/m3") |> 
+  group_by(sampling_number) |> 
+  summarise(
+    n_components = n(),
+    n_distinct_results = n_distinct(result_num),
+    all_results_identical = n_distinct(result_num) == 1,
+    total_time = sum(time, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Summary: how many sampling numbers have identical vs differing result_num across components?
+check_calc_status |> 
+  filter(n_components > 1) |>   # only relevant for sampling numbers with multiple media
+  count(all_results_identical) 
+
+# For sampling numbers with >1 component, does a duration-weighted average of the
+# individual result_num values recreate any single one of them, or land somewhere in between?
+check_calc_status_detail <- dat |> 
+  filter(eighthr == "Y" & uom == "mcg/m3") |> 
+  group_by(sampling_number) |> 
+  filter(n() > 1) |> 
+  summarise(
+    results = paste(round(result_num, 1), collapse = ", "),
+    times = paste(round(time, 2), collapse = ", "),
+    computed_twa = sum(result_num * time, na.rm = TRUE) / sum(time, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+check_calc_status_detail 
+
+check_calc_status2 <- dat |> 
+  filter(eighthr == "Y" & uom == "mcg/m3") |> 
+  group_by(sampling_number) |> 
+  summarise(
+    n_components = n(),
+    n_distinct_results = n_distinct(result_num),
+    all_results_identical = n_distinct(result_num) == 1,
+    all_results_zero = all(result_num == 0),
+    total_time = sum(time, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Break the "identical" bucket into trivial-zero vs genuine non-zero matches
+check_calc_status2 |> 
+  filter(n_components > 1) |> 
+  count(all_results_identical, all_results_zero)
+```
+
+## Removing blank samples 
+
+```{r} 
+dat |> 
+  group_by(qualifier) |> 
+  count() 
+
+dat |> 
+  filter(uom == "mcg") |> 
+  group_by(qualifier) |> 
+  count()
+
+dat <- dat |> 
+  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t")))
+```
 
 ## Time-weighted average observations 
 
@@ -284,32 +451,31 @@ Looks like we will not be retaining any of the results corresponding to the STEL
 
 Let's create an indicator variable for whether the measurements were above 6-hours or not, and take a peek at what data remains: 
 
-```{r}
-dat <- dat |> 
-  mutate(six_hour = time >= 6 )
+```{r} 
+dat |> 
+  filter(eighthr == "Y") |> 
+  count()
+dat |> 
+  filter(eighthr == "Y") |> 
+  count()
+dat |> 
+  filter(eighthr == "N" & time >=6) |> 
+  count() 
 
 dat |> 
-  group_by(six_hour) |> 
-  summarise(
-    count = n(),
-    mean = mean(result_num, na.rm = TRUE),
-    median = median(result_num, na.rm = TRUE),
-    min = min(result_num, na.rm = TRUE),
-    max = max(result_num, na.rm = TRUE),
-    sd = sd(result_num, na.rm = TRUE)) 
+  filter(eighthr == "N" & is.na(time) ) |> 
+  count()
 
-#what about the observations that are below, are they time-weighted? 
 dat |> 
-  filter(six_hour %in% c(FALSE, NA)) |> 
-  group_by(six_hour,eighthr) |> 
-  summarise(n()) 
+  filter(eighthr == "N" & time <6) |> 
+  count() 
 
-#if we only retain measurements over six hours, how much data do we have per year? 
-dat |>  
-  filter(six_hour == TRUE) |> 
-  group_by(year) |> 
-  summarise(
-    count = n()) 
+#removing observations that are not time weighted and are below 6 hours in time
+
+dat_filtered <- dat |> 
+  filter(!(eighthr == "N" & is.na(time))) |> 
+  filter(!(eighthr == "N" & time < 6 & !is.na(time)))
+
 ``` 
 
 Before we exclude any data, we want to check if we have repeated measurements per establishments: 
