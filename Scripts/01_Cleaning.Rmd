@@ -69,7 +69,7 @@ dat <- raw_dat |>
   rename_with(tolower) |> 
   mutate(
     date_sampled = dmy(date_sampled), 
-    year = year(date_sampled),
+    year = year(date_sampled), 
          type = fct_recode(type,
                           "Personal" = "P",
                           "Area" = "A",
@@ -162,13 +162,9 @@ dat |>
   summarize(n())
 ```
 
-
-
-# Inclusion/Exclusion  
-
 ## Personal Measurements
 
-To start, we have 2,135 observations. Next, we want to restrict our sample to only those pertaining to personal measurements. 
+To start, we have 2,135 observations. Next, we want to see how many measurements pertain to personal measurements. 
 
 ```{r}
 dat |> 
@@ -176,26 +172,7 @@ dat |>
   summarize(n())
 ```
 
-We will retain 1,839 observations that used Personal measurements. We will drop those for Area measurements (n = 20), and missing data (n = 276). 
 
-```{r}
-dat <- dat |> 
-  filter(type == "Personal")
-```
-
-Now that we've excluded some samples, let's go back in and see how the air volume data fits or doesn't: 
-
-```{r}
-dat |> 
-  filter(uom %in% c("mg", "mcg")) |> 
-  select(uom, air_volume) |>
-  group_by(uom) |>
-  summarise(
-    total_rows = n(),
-    non_na_values = sum(!is.na(air_volume)),
-    na_count = sum(is.na(air_volume))
-  )
-``` 
 
 Let's also check to see the distribution of samples by year: 
 
@@ -390,21 +367,7 @@ check_calc_status2 |>
   count(all_results_identical, all_results_zero)
 ```
 
-## Removing blank samples 
 
-```{r} 
-dat |> 
-  group_by(qualifier) |> 
-  count() 
-
-dat |> 
-  filter(uom == "mcg") |> 
-  group_by(qualifier) |> 
-  count()
-
-dat <- dat |> 
-  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t")))
-```
 
 ## Time-weighted average observations 
 
@@ -470,12 +433,6 @@ dat |>
   filter(eighthr == "N" & time <6) |> 
   count() 
 
-#removing observations that are not time weighted and are below 6 hours in time
-
-dat_filtered <- dat |> 
-  filter(!(eighthr == "N" & is.na(time))) |> 
-  filter(!(eighthr == "N" & time < 6 & !is.na(time)))
-
 ``` 
 
 Before we exclude any data, we want to check if we have repeated measurements per establishments: 
@@ -513,7 +470,7 @@ full_sample_check |>
 
 #Restricted sample: 
 restricted_sample_check <- dat |>
-  filter(six_hour == 1) |>  # or your > 6 hour filter
+  filter(time >= 6) |>  # or your > 6 hour filter
   group_by(establishment) |>
   summarise(
     n_obs = n(),
@@ -548,5 +505,70 @@ tribble(
 We do not meet the assumptions of LMEM according to [this article](https://ladal.edu.au/tutorials/mixedmodel/mixedmodel.html), which details that we need 5-10 observations per random-effect level for reliable variance estimates, and at least 20-30 random-effect levels. 
 
 It is recommended that no matter what, we apply cluster-robust standard errors to account for within-group variation. To deal with this, we are going to plan on fitting a generalized linear mixed model that adds a cluster-specific random effect to the linear predictor. Our cluster variable will be id. 
+ 
+# Unit of Measurement Consistency 
+
+We need to make sure we are only using reported results under one standard unit of measurement. 
+
+Since the OSHA limits correspond to micrograms/m^3, we will convert our other measurement to be consistent with this. 
+
+```{r}
+
+```
+
+# Inclusion/Exclusion  
+
+## Personal Measurements
+
+To start, we have 2,135 observations. Next, we want to restrict our sample to only those pertaining to personal measurements.  
 
 
+```{r}
+dat |> 
+  group_by(type) |> 
+  summarize(n())
+```
+We will retain 1,839 observations that used Personal measurements. We will drop those for Area measurements (n = 20), and missing data (n = 276). 
+```{r}
+dat2 <- dat |> 
+  filter(type == "Personal")
+```
+
+## Removing blank samples 
+
+```{r} 
+dat2 |> 
+  group_by(qualifier) |> 
+  count() 
+
+dat2 |> 
+  filter(uom == "mcg") |> 
+  group_by(qualifier) |> 
+  count()
+
+dat3 <- dat2 |> 
+  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t")))
+```
+
+
+## Removing observations that are not time weighted and are below 6 hours in time
+
+```{r}
+dat_4 <- dat3 |> 
+  filter(!(eighthr == "N" & is.na(time))) |> 
+  filter(!(eighthr == "N" & time < 6 & !is.na(time)))
+``` 
+
+Let's check and see how many observations we have: 
+
+```{r}
+glimpse(dat_4)
+``` 
+
+
+
+Let's save our analytic dataset: 
+
+```{r}
+write_csv(dat_4, "../CleanData/study_dat.csv")
+```

@@ -1,0 +1,60 @@
+---
+title: "02_Exploration"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    toc_float: true 
+    code_folding: hide 
+---
+
+```{r setup, include = FALSE}
+# Load packages
+library(tidyverse)
+library(ggplot2) 
+library(readxl) 
+library(lubridate)
+library(janitor)
+
+# Global options
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+study_dat <- read.csv("../CleanData/study_dat.csv") 
+
+study_dat <- study_dat |> 
+  mutate(year = as.factor(year),
+         date_sampled = ymd(date_sampled))
+```
+
+# Introduction 
+
+[enter introduction l8r]
+
+# General Data Summaries 
+
+## Observations by Year
+
+```{r}
+study_dat |>
+  group_by(year) |> 
+  count() 
+
+ggplot(data = study_dat, aes(x = year, y = result_num))+
+  geom_boxplot()+
+  labs(title = "Respirable Silica Measurements by Year", x = "Year", y = "Silica (units)") 
+
+#same, this time by date 
+
+ggplot(data = study_dat, aes(x = date_sampled, y = result_num)) +
+  geom_point() +
+  scale_x_date(date_breaks = "year", date_labels = "%b %Y") +
+  labs(
+    title = "Respirable Silica Measurements by Year",
+    x = "Date",
+    y = "Silica (units)"
+  )+ 
+  theme_classic()
+``` 
+
+
