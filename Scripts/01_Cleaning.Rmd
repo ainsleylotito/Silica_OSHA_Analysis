@@ -510,11 +510,73 @@ It is recommended that no matter what, we apply cluster-robust standard errors t
 
 We need to make sure we are only using reported results under one standard unit of measurement. 
 
-Since the OSHA limits correspond to micrograms/m^3, we will convert our other measurement to be consistent with this. 
+Since the OSHA limits correspond to micrograms/m^3, we will convert our other measurement to be consistent with this.  
+
+Just to review, let's double-check what the possible values are for our silica measurements: 
 
 ```{r}
-
+dat |> 
+  group_by(uom) |> 
+  summarize(n())
 ```
+We have 56 that are NA, let's just double check that these aren't all time-weighted before we consider deleting them: 
+
+```{r}
+dat |> 
+  filter(is.na(uom)) |> 
+  group_by(eighthr) |> 
+  summarize(n())
+```
+There are 39 observations that are not time-weighted, so we need to be sure to exclude them from the sample. We are also going to plan on doing a sensitivity analysis on the observations that have no uom but are time-weighted; we cannot be sure what units these are in, so we can add them back in later and see whether things change significantly.  
+
+## Comparing mg to mcg 
+
+Before we convert all our units, let's do a check to see how the different concentrations differ: 
+
+```{r}
+dat |> 
+  group_by(uom) |> 
+  summarize(n= n(),
+            mean = mean(result_num),
+            sd = sd(result_num))
+```
+Looks like we need to see how many observations are missing data for the mg/m3 observations: 
+```{r}
+dat |> 
+  filter(uom == "mg/m3") |> 
+  summarize(n = sum(is.na(result_num)))
+
+dat |> 
+  filter(uom == "mg/m3" ) |> 
+  group_by(qualifier) |> 
+  summarize(n())
+```
+Ok so we have 29 instances where we are missing the measurements...
+
+We will need to exclude those in our measurements, as they are required to have a result in this instance. 
+
+Let's convert the units accordingly: 
+
+```{r}
+dat |> 
+    mutate(
+    result_num = case_when(
+      uom == "mg" ~ result_num * 1000,      # mg → mcg (multiply by 1000)
+      uom == "mg/m3" ~ result_num * 1000,   # mg/m3 → mcg/m3 (multiply by 1000)
+      TRUE ~ result_num
+    ),
+    uom = case_when(
+      uom == "mg" ~ "mcg",
+      uom == "mg/m3" ~ "mcg/m3",
+      TRUE ~ uom
+    )
+  ) |> 
+  group_by(uom) |> 
+summarize(n= n(),
+            mean = mean(result_num, na.rm=TRUE),
+            sd = sd(result_num,na.rm=TRUE))
+```
+
 
 # Inclusion/Exclusion  
 
@@ -534,6 +596,15 @@ dat2 <- dat |>
   filter(type == "Personal")
 ```
 
+## Removing samples lacking unit of measurement 
+
+Reminder: we will run a sensitivity analysis on the sample without units in the future, assuming they are coded consistent with IMIS code 9000, whcih should be in units of milligrams per cubic meter. 
+
+```{r}
+
+```
+
+
 ## Removing blank samples 
 
 ```{r} 
@@ -549,6 +620,7 @@ dat2 |>
 dat3 <- dat2 |> 
   filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t")))
 ```
+
 
 
 ## Removing observations that are not time weighted and are below 6 hours in time
