@@ -649,7 +649,7 @@ dust2 |>
   group_by(uom) |> 
   count()
 ```
-We can only retain the measurements that are in mg/m3 to do this analysis. Accordingly, we will subset our data: 
+We are going to retain the data coded as mg/m3 as the measured concentration. We will need to convert the measurements in mg or mcg over to a concentration using our join key with the % quartz measurements. Accordingly, we will subset our data: 
 
 ```{r}
 nrow(dust2) 
