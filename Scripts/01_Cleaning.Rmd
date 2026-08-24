@@ -64,11 +64,12 @@ We want to achieve the following:
 
 Convert result to numeric, check how many are blanks? Also check how many are per sample type and make into nicer format. Check how many went in and used eight hour TWA calculation too. Changing time to be in terms of hours instead of minutes. Adding indicator in case of data being "less than" values, so we can go back in and perhaps do a sensitivity analysis of some kind or just have the knowledge that they were less than that number.
 
-To start, let's simply apply some reformats to our data: 
+To start, let's simply apply some reformats to our data. We will make this a function to save time later: 
 
-```{r}
-dat <- raw_dat |> 
-  rename_with(tolower) |> 
+```{r} 
+clean_osha <- function(df){
+  df |> 
+    rename_with(tolower) |> 
   mutate(
     date_sampled = dmy(date_sampled), 
     year = year(date_sampled), 
@@ -76,13 +77,23 @@ dat <- raw_dat |>
                           "Personal" = "P",
                           "Area" = "A",
                           "Bulk" = "B", 
-                          "Wipe" = "W"), 
+                          "Wipe" = "W"),  
+    uom = fct_recode(uom,
+                          "mg" = "MG", #milligrams
+                          "mg" = "Y", #milligrams
+                          "mcg" = "X", #micrograms
+                          "mcg/m3" = "MCG/M3", #micrograms/m3
+                          "mg/m3" = "MG_M3", #milligrams/m3
+                          "mg/m3" = "M"), #milligrams/m3
     blank = as.logical(blank),
     time = time/60,
     less_than_measurement = grepl("^\\s*<", result),
     result_num = as.numeric(gsub("<\\s*", "", result))
     ) |> 
-  select(-office, -naics, -date_reported, -lab_number, -csho, -sic)
+  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
+}
+dat <- clean_osha(raw_dat) 
+  
 ```
 
 ### Examination  
@@ -145,20 +156,6 @@ Let's apply some reformatting again with the new information.
  M = mg/m^3, X = micrograms, Y = milligrams.
 
 ```{r}
-dat <- dat |> 
-  select(-instrument, -blank) |> 
-  mutate(
-    uom = fct_recode(uom,
-                          "mg" = "MG", #milligrams
-                          "mg" = "Y", #milligrams
-                          "mcg" = "X", #micrograms
-                          "mcg/m3" = "MCG/M3", #micrograms/m3
-                          "mg/m3" = "MG_M3", #milligrams/m3
-                          "mg/m3" = "M" #milligrams/m3
-                     )
-    )
-  
-
 dat |> 
   group_by(uom) |> 
   summarize(n())
@@ -598,75 +595,185 @@ tail(quartz_dat)
 
 ## Reformatting 
 
-We can recylce most of the reformatting we used previously, just making certain that we retain the Lab No. Variable. 
+We can reuse our clean_osha function here: 
 
 ```{r}
-dust2 <- dust_dat |> 
-  rename_with(tolower) |> 
-  mutate(
-    date_sampled = dmy(date_sampled), 
-    year = year(date_sampled), 
-         type = fct_recode(type,
-                          "Personal" = "P",
-                          "Area" = "A",
-                          "Bulk" = "B", 
-                          "Wipe" = "W"),  
-    uom = fct_recode(uom,
-                          "mg" = "MG", #milligrams
-                          "mg" = "Y", #milligrams
-                          "mcg" = "X", #micrograms
-                          "mcg/m3" = "MCG/M3", #micrograms/m3
-                          "mg/m3" = "MG_M3", #milligrams/m3
-                          "mg/m3" = "M"), #milligrams/m3
-    blank = as.logical(blank),
-    time = time/60,
-    less_than_measurement = grepl("^\\s*<", result),
-    result_num = as.numeric(gsub("<\\s*", "", result))
-    ) |> 
-  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
-
-
+dust2 <- clean_osha(dust_dat) 
+  
 dust2 |> 
   group_by(uom) |> 
   summarize(n()) 
 
 range(dust2$year)
 
-quartz2 <- quartz_dat |> 
-  rename_with(tolower) |> 
-  mutate(
-    date_sampled = dmy(date_sampled), 
-    year = year(date_sampled), 
-         type = fct_recode(type,
-                          "Personal" = "P",
-                          "Area" = "A",
-                          "Bulk" = "B", 
-                          "Wipe" = "W"),  
-    uom = fct_recode(uom,
-                          "mg" = "MG", #milligrams
-                          "mg" = "Y", #milligrams
-                          "mcg" = "X", #micrograms
-                          "mcg/m3" = "MCG/M3", #micrograms/m3
-                          "mg/m3" = "MG_M3", #milligrams/m3
-                          "mg/m3" = "M"), #milligrams/m3
-    blank = as.logical(blank),
-    time = time/60,
-    less_than_measurement = grepl("^\\s*<", result),
-    result_num = as.numeric(gsub("<\\s*", "", result))
-    ) |> 
-  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
-
+quartz2 <-clean_osha(quartz_dat)
+ 
 
 quartz2 |> 
   group_by(uom) |> 
   summarize(n())
 ```
 
+## Examining Quartz 
+We need to double check what the units of measurement and recorded numbers look like in this data. 
+
+Fortunately, the variable for result is numeric, so we don't need to worry about the "<" measurements. 
+
+```{r}
+quartz2 |> 
+  group_by(uom) |> 
+  count() 
+```
+"AAAAA" likely refers to the samples that had blanks or other problems.
+
+For our quartz data specifically, we only want to retain the observations that contain a quartz fraction (unit of measurement = "%"). We will therefore subset the data accordingly: 
+
+```{r}
+nrow(quartz2) 
+
+quartz3 <- quartz2 |> 
+  filter(uom == "%") 
+
+nrow(quartz3)
+```
+We started with 4,672 observations, and excluded observations not pertaining to a % (AAAAA: n =11, N: n = 2, mcg: n = 326, mg: n = 20, NA: n = 136). We now have 4,177 observations.
+
+
+## Examining Dust 
+We need to double check what the units of measurement and recorded numbers look like in this data. 
+
+We know that the result for dust is similar to the respirable silica dataset that included "<" measurements, so we will also need to create a numeric version of the results, making note of this in our results.
+
+```{r}
+dust2 |> 
+  group_by(uom) |> 
+  count()
+```
+We can only retain the measurements that are in mg/m3 to do this analysis. Accordingly, we will subset our data: 
+
+```{r}
+nrow(dust2) 
+
+dust3 <- dust2 |> 
+  filter(uom == "mg/m3") 
+
+nrow(dust3)
+```
+
+We started with 3,893 observations, and excluded units of measurement of AAAAA (n =2), mg (n = 251), mcg (n =1), and NAs (n = 5). We now have 3,633 observations.
+
 
 ## Merging by Lab No. 
 
-We only want to retain values that have the same Lab No., and values that correspond to the same date sampled. 
+We only want to retain values that have the same Lab No., and values that correspond to the same date sampled. We are going to join these two datasets based on lab_number and date_sampled to be sure that the joins correspond to the same day/sample. First, we are going to rename our results from these two datasets into "dust_conc" and "quartz_pct". 
 
+```{r}
+dust4 <- dust3 |> 
+  select(lab_number, date_sampled, field_number, sampling_number, 
+         establishment, type, eighthr, time, air_volume, weight,
+         uom, result_num) |>
+  rename(dust_conc = result_num, dust_uom = uom)
+
+quartz4 <- quartz3 |> 
+  select(lab_number, date_sampled, field_number, sampling_number,
+          result_num) |>
+  rename(quartz_pct = result_num)
+```
+
+Checks before joining: 
+
+Does either table have duplicate lab_number + date_sampled combos? 
+
+```{r}
+dust4 |> 
+  count(lab_number, date_sampled) |> 
+  filter(n > 1) |> 
+  nrow()
+
+quartz4 |> 
+  count(lab_number, date_sampled) |> 
+  filter(n > 1) |> 
+  nrow()
+``` 
+
+
+Examining further: 
+
+```{r}
+dust4 |> 
+  add_count(lab_number, date_sampled) |> 
+  filter(n > 1) |> 
+  arrange(lab_number, date_sampled) |>
+  select(lab_number, date_sampled, field_number, dust_conc) 
+
+dust4 |> 
+  count(across(everything())) |> 
+  filter(n > 1) |> 
+  nrow()
+
+# Compare to duplication on just the key columns
+dust4 |> 
+  count(lab_number, date_sampled, field_number) |> 
+  filter(n > 1) |> 
+  nrow() 
+
+nrow(dust4) #359 duplicates?
+dust4_dedup <- dust4 |> 
+  distinct()
+nrow(dust4_dedup) 
+
+dust4_dedup |> 
+  count(lab_number, field_number) |> 
+  filter(n > 1) |> 
+  nrow() 
+```
+This tells us that we also need to join on the field number, or else we will have duplicates. 
+
+
+Checking to see what will not match on either side: 
+
+```{r}
+
+only_in_dust <- anti_join(dust4, quartz4, by = c("lab_number", "field_number"))
+only_in_quartz <- anti_join(quartz4, dust4, by = c("lab_number", "field_number"))
+
+nrow(only_in_dust)    # dust samples with no matching quartz fraction
+nrow(only_in_quartz)  # quartz samples with no matching dust concentration
+
+# Look at a few to understand why they don't match
+only_in_dust |> head(10)
+only_in_quartz |> head(10) 
+
+#trying again, adding sampling number: 
+only_in_dust2 <- anti_join(dust4, quartz4, by = c("lab_number", "field_number", "sampling_number"))
+only_in_quartz2 <- anti_join(quartz4, dust4, by = c("lab_number", "field_number", "sampling_number"))
+
+nrow(only_in_dust2)    
+nrow(only_in_quartz2) 
+
+```
+## lab number inspection 
+
+```{r}
+length(intersect(quartz4$lab_number, dust4$lab_number))
+length(unique(quartz4$lab_number))
+length(unique(dust4$lab_number))
+```
+There should be 1621 intersecting lab numbers.
+
+
+# Preparing to merge 
+
+Now that we have our datasets for respirable silica and our calculated versions, we need to stack them, ensuring that we aren't creating duplicate entries for a given worksite on the same day (using the field_number to double check.) 
+
+```{r} 
+glimpse(quartz4)
+glimpse(dust4)
+merged_dust_quartz <- quartz4 |> 
+  inner_join(dust4, by = c("lab_number", "date_sampled", "field_number", "sampling_number"),
+             relationship = "one-to-one")
+```
+Next time: check and see what units are included in the quartz section: we only need to retain the ones that are not in mg/m3 for the calculation. The others should (allegedly) be able to get matched just from the mg/m3 unit.
 
 ## Inclusion/Exclusion  
 
