@@ -8,7 +8,11 @@ This repository contains code and data for analyzing respirable silica workplace
 
 ## Data 
 Raw datafiles are in the `/RawData` directory.
-- Respirable_Silica_Data.txt contains the OSHA samples from 1984-2026 for **Silica, Crystaline, and Mixed Respirable (Quartz, Cristobalite, Tridymite)** [IMIS Code: 9000]. Data was restricted to industries categorized as NAICS:327991. Data were pulled on August 20, 2026.
+- Respirable_Silica_Data.txt contains the OSHA samples from 1984-2026 for **Silica, Crystaline, and Mixed Respirable (Quartz, Cristobalite, Tridymite)** [IMIS Code: 9000]. Data was restricted to industries categorized as NAICS:327991. Data were pulled on August 20, 2026. 
+
+- Respirable_Dust_Concentration.txt contains the OSHA samples from 1984-2026 for **Respirable Dust Concentration** [IMIS Code: 9130]. Data was restricted to industries categorized as NAICS:327991. Data were pulled on August 24, 2026.  
+
+- Crystalline_Quartz_Fraction.txt contains the OSHA samples from 1984-2026 for **Crystalline Quartz Fraction [%]** [IMIS Code: 9010]. Data was restricted to industries categorized as NAICS:327991. Data were pulled on August 24, 2026.
 
 ### Data sources: 
 

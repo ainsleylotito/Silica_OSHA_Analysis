@@ -30,7 +30,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 This script will contain the code necessary to clean the data stored in the `/RawData` folder. 
 
-To start it will focus on only cleaning data puled pertaining to the 9000 IMIS classification; later on, subsequent datasets may be cleaned, merged, and analyzed. 
+To start it will focus on only cleaning data puled pertaining to the 9000 IMIS classification; then it will generate the samples pertaining to 9130 (respirable dust concentration) and 9010 (crystalline quartz fraction [%]) to calculate silica concentrations for years prior to the classification of 9000. 
 
 New variables created during the cleaning process, as well as a description of all other included variables, are contained within the excel file `DataDictionary.xlsx`.  
 
@@ -40,9 +40,11 @@ New variables created during the cleaning process, as well as a description of a
 
 2. Apply inclusion/exclusion criteria 
 
-3. Add OEL data, create variable that states whether observed sample is above or below.  
+3. Add OEL data, create variable that states whether observed sample is above or below.   
 
-# Data Import and Initial Examination
+#IMIS 9000 data
+
+## Data Import and Initial Examination
 
 ```{r import_data, results= FALSE}
 raw_dat <- read_delim("../RawData/Respirable_Silica_Data.txt", delim = "|") 
@@ -83,7 +85,7 @@ dat <- raw_dat |>
   select(-office, -naics, -date_reported, -lab_number, -csho, -sic)
 ```
 
-## Examination  
+### Examination  
 
 Let's first see how many years our data spans: 
 
@@ -162,7 +164,7 @@ dat |>
   summarize(n())
 ```
 
-## Personal Measurements
+### Personal Measurements
 
 To start, we have 2,135 observations. Next, we want to see how many measurements pertain to personal measurements. 
 
@@ -369,7 +371,7 @@ check_calc_status2 |>
 
 
 
-## Time-weighted average observations 
+### Time-weighted average observations 
 
 Next, we want to get an idea of how our samples may differ depending on how many of them used a time-weighted average. 
 
@@ -410,7 +412,7 @@ dat |>
 Looks like we will not be retaining any of the results corresponding to the STEL ceiling peak as they have way too short times of duration. 
 
 
-## Over 6-hours of duration 
+### Over 6-hours of duration 
 
 Let's create an indicator variable for whether the measurements were above 6-hours or not, and take a peek at what data remains: 
 
@@ -506,7 +508,7 @@ We do not meet the assumptions of LMEM according to [this article](https://ladal
 
 It is recommended that no matter what, we apply cluster-robust standard errors to account for within-group variation. To deal with this, we are going to plan on fitting a generalized linear mixed model that adds a cluster-specific random effect to the linear predictor. Our cluster variable will be id. 
  
-# Unit of Measurement Consistency 
+## Unit of Measurement Consistency 
 
 We need to make sure we are only using reported results under one standard unit of measurement. 
 
@@ -529,7 +531,7 @@ dat |>
 ```
 There are 39 observations that are not time-weighted, so we need to be sure to exclude them from the sample. We are also going to plan on doing a sensitivity analysis on the observations that have no uom but are time-weighted; we cannot be sure what units these are in, so we can add them back in later and see whether things change significantly.  
 
-## Comparing mg to mcg 
+### Comparing mg to mcg 
 
 Before we convert all our units, let's do a check to see how the different concentrations differ: 
 
@@ -551,14 +553,12 @@ dat |>
   group_by(qualifier) |> 
   summarize(n())
 ```
-Ok so we have 29 instances where we are missing the measurements...
-
-We will need to exclude those in our measurements, as they are required to have a result in this instance. 
+ 
 
 Let's convert the units accordingly: 
 
 ```{r}
-dat |> 
+dat <- dat |> 
     mutate(
     result_num = case_when(
       uom == "mg" ~ result_num * 1000,      # mg → mcg (multiply by 1000)
@@ -570,7 +570,8 @@ dat |>
       uom == "mg/m3" ~ "mcg/m3",
       TRUE ~ uom
     )
-  ) |> 
+  )
+dat|> 
   group_by(uom) |> 
 summarize(n= n(),
             mean = mean(result_num, na.rm=TRUE),
@@ -578,9 +579,98 @@ summarize(n= n(),
 ```
 
 
-# Inclusion/Exclusion  
+# IMIS 9130 and 9010 Data Import 
 
-## Personal Measurements
+Next, we need to import the data pertaining to the other two codes. 
+We need to be certain that the samples match with each other (matching on "Lab No."), before multiplying the respirable dust concentration by the quartz percentage for corresponding samples.  
+
+```{r}
+dust_dat <- read_delim("../RawData/Respirable_Dust_Concentration.txt", delim = "|") 
+glimpse(dust_dat)
+head(dust_dat) 
+tail(dust_dat) 
+
+quartz_dat <- read_delim("../RawData/Crystalline_Quartz_Fraction.txt", delim = "|") 
+glimpse(quartz_dat)
+head(quartz_dat) 
+tail(quartz_dat)
+```
+
+## Reformatting 
+
+We can recylce most of the reformatting we used previously, just making certain that we retain the Lab No. Variable. 
+
+```{r}
+dust2 <- dust_dat |> 
+  rename_with(tolower) |> 
+  mutate(
+    date_sampled = dmy(date_sampled), 
+    year = year(date_sampled), 
+         type = fct_recode(type,
+                          "Personal" = "P",
+                          "Area" = "A",
+                          "Bulk" = "B", 
+                          "Wipe" = "W"),  
+    uom = fct_recode(uom,
+                          "mg" = "MG", #milligrams
+                          "mg" = "Y", #milligrams
+                          "mcg" = "X", #micrograms
+                          "mcg/m3" = "MCG/M3", #micrograms/m3
+                          "mg/m3" = "MG_M3", #milligrams/m3
+                          "mg/m3" = "M"), #milligrams/m3
+    blank = as.logical(blank),
+    time = time/60,
+    less_than_measurement = grepl("^\\s*<", result),
+    result_num = as.numeric(gsub("<\\s*", "", result))
+    ) |> 
+  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
+
+
+dust2 |> 
+  group_by(uom) |> 
+  summarize(n()) 
+
+range(dust2$year)
+
+quartz2 <- quartz_dat |> 
+  rename_with(tolower) |> 
+  mutate(
+    date_sampled = dmy(date_sampled), 
+    year = year(date_sampled), 
+         type = fct_recode(type,
+                          "Personal" = "P",
+                          "Area" = "A",
+                          "Bulk" = "B", 
+                          "Wipe" = "W"),  
+    uom = fct_recode(uom,
+                          "mg" = "MG", #milligrams
+                          "mg" = "Y", #milligrams
+                          "mcg" = "X", #micrograms
+                          "mcg/m3" = "MCG/M3", #micrograms/m3
+                          "mg/m3" = "MG_M3", #milligrams/m3
+                          "mg/m3" = "M"), #milligrams/m3
+    blank = as.logical(blank),
+    time = time/60,
+    less_than_measurement = grepl("^\\s*<", result),
+    result_num = as.numeric(gsub("<\\s*", "", result))
+    ) |> 
+  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
+
+
+quartz2 |> 
+  group_by(uom) |> 
+  summarize(n())
+```
+
+
+## Merging by Lab No. 
+
+We only want to retain values that have the same Lab No., and values that correspond to the same date sampled. 
+
+
+## Inclusion/Exclusion  
+
+### Personal Measurements
 
 To start, we have 2,135 observations. Next, we want to restrict our sample to only those pertaining to personal measurements.  
 
@@ -596,51 +686,110 @@ dat2 <- dat |>
   filter(type == "Personal")
 ```
 
-## Removing samples lacking unit of measurement 
 
-Reminder: we will run a sensitivity analysis on the sample without units in the future, assuming they are coded consistent with IMIS code 9000, whcih should be in units of milligrams per cubic meter. 
+### Removing blank samples 
 
-```{r}
-
-```
-
-
-## Removing blank samples 
+Next we will exclude all samples that were recorded as blank. 
 
 ```{r} 
 dat2 |> 
   group_by(qualifier) |> 
   count() 
 
-dat2 |> 
-  filter(uom == "mcg") |> 
-  group_by(qualifier) |> 
-  count()
 
 dat3 <- dat2 |> 
   filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t")))
 ```
+We gave removed blank samples (n =1) and samples that were recorded as both ND (LOQ) and Blank (n = 368), and those recorded as ND, Blank/t (n =3).  
+
+We now have 1470 observations.
 
 
+###Removing samples that lack a recorded measurement  
 
-## Removing observations that are not time weighted and are below 6 hours in time
+We need our data to record a legitimate recorded measurement. First, we will check to see what the samples are recorded as when they are listed as being LOQ:
 
 ```{r}
-dat_4 <- dat3 |> 
-  filter(!(eighthr == "N" & is.na(time))) |> 
-  filter(!(eighthr == "N" & time < 6 & !is.na(time)))
+dat3 |> 
+  summarise(sum(is.na(result_num)))
+
+dat3 |> 
+  filter(is.na(result_num)) |> 
+  group_by(qualifier) |> 
+  summarise(n()) 
+
+```
+ There are 73 observations that are missing data for the recorded measurement. As such we will have to delete these observations. 
+ 
+```{r} 
+dat4 <- dat3 |> 
+  filter(!is.na(result_num))
+```
+ After removal, we now have 1,397 observations.
+ 
+### Removing samples lacking air volume data
+
+We are only going to retain samples that contain clear units standardized to air volume. We cannot convert our observations to a concentration that are standalones, since they lack air volume data. 
+
+To our best knowledge, the records cannot be personal air samples, and were likely bulk samples that were miscoded as personal samples.
+
+```{r}
+dat4 |> 
+  group_by(uom) |> 
+  summarise(n())
+```
+At this time, there is only one value that is not standardized to air volume; we will now exclude it (n =1): 
+
+```{r}
+dat5 <- dat4 |> 
+  filter(uom == "mcg/m3")
+```
+
+We now have 1,396 observations. 
+
+
+### Removing observations that are below 6 hours in time
+
+```{r} 
+dat5 |> 
+  mutate(six_hours = time >= 6) |>
+  filter(six_hours == "TRUE") |> 
+  group_by( year) |> 
+  summarise(n()) #checking that we have enough observations
+
+dat5 |> 
+  filter(is.na(time)) |> 
+  count() 
+dat5 |> 
+  filter(time < 6) |> 
+  count() 
+
+dat5 |> 
+  filter(time < 6 & is.na(time)) |> 
+  count() 
+
+dat6 <- dat5 |> 
+  filter(!(time < 6 & !is.na(time)))
 ``` 
+6 are missing time data. n = 797 are less than 6 hours in duration.   
+
+After excluding, we are left with 599 observations.
+
 
 Let's check and see how many observations we have: 
 
 ```{r}
-glimpse(dat_4)
+glimpse(dat6)
 ``` 
 
 
 
+
+
+#OEL data addition
+
 Let's save our analytic dataset: 
 
 ```{r}
-write_csv(dat_4, "../CleanData/study_dat.csv")
+write_csv(dat6, "../CleanData/study_dat.csv")
 ```
