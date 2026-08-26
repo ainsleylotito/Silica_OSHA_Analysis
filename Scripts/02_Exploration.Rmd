@@ -33,12 +33,28 @@ study_dat <- study_dat |>
 
 # General Data Summaries 
 
-## Observations by Year
+## Observations by Year 
+
+Let's start by seeing how many measurements were recorded by year:
 
 ```{r}
-study_dat |>
+study_dat |>  
+  #mutate(year = as.numeric(year)) |> 
   group_by(year) |> 
-  count() 
+  summarize(measurements_in_year = n()) |> 
+  ggplot(aes(x = year, y = measurements_in_year)) +
+  geom_point(size = 2) + 
+  geom_line() +
+  labs(
+    title = "Number of Measurements by Year",
+    x = "Year",
+    y = "Count of Measurements"
+  ) +
+  theme_classic()
+
+```
+
+```{r}
 
 ggplot(data = study_dat, aes(x = year, y = silica_conc))+
   geom_boxplot()+
@@ -57,19 +73,12 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
   theme_classic()+ 
    theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ``` 
-
-Let's investigate how our data differs depending on if it was taken from the IMIS code of 9000, or if we did the calculation to get the respirable silica concentration: 
+Let's try adding in a smooth line to see if there are any apparent long-term patterns: 
 
 ```{r}
-
-#version where we facet by IMIS code 
-study_dat <- study_dat |> 
-  mutate(imis = factor(imis, levels = c("9010_9130", "9000"),
-                       labels = c("Combined Quartz and Respirable Dust", "Respirable Silica")))
-
 ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
   geom_point(size=1, alpha = 0.5) + 
-  facet_grid(. ~ imis)+
+  geom_smooth()+
   scale_x_date(date_breaks = "year", date_labels = "%b %Y") +
   labs(
     title = "Respirable Silica Measurements by Year",
@@ -78,8 +87,10 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
   )+ 
   theme_classic()+ 
    theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+This may not be possible to see or use, as we may not have enough observations to appropriately fit our time series with year. 
 
-```  
+
 
 This is kind of hard to interpret. Let's add in our regulatory levels, and zoom in on our graph to see the patterns easier: 
 
@@ -129,6 +140,31 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
     legend.position = "right"
   )
 ```
+
+Let's investigate how our data differs depending on if it was taken from the IMIS code of 9000, or if we did the calculation to get the respirable silica concentration: 
+
+```{r}
+
+#version where we facet by IMIS code 
+study_dat <- study_dat |> 
+  mutate(imis = factor(imis, levels = c("9010_9130", "9000"),
+                       labels = c("Combined Quartz and Respirable Dust", "Respirable Silica")))
+
+ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
+  geom_point(size=1, alpha = 0.5) + 
+  facet_grid(. ~ imis)+
+  scale_x_date(date_breaks = "year", date_labels = "%b %Y") +
+  labs(
+    title = "Respirable Silica Measurements by Year",
+    x = "Date",
+    y = "Silica (mcg/m3)"
+  )+ 
+  theme_classic()+ 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```  
+
+
 
 Let's look at this a bit differently, with a bar graph that tells us how many observations exceed the PEL per year: 
 
