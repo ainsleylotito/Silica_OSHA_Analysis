@@ -47,15 +47,114 @@ ggplot(data = study_dat, aes(x = year, y = silica_conc))+
 #same, this time by date 
 
 ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
-  geom_point() +
+  geom_point(size=1, alpha = 0.5) +
   scale_x_date(date_breaks = "year", date_labels = "%b %Y") +
   labs(
     title = "Respirable Silica Measurements by Year",
     x = "Date",
-    y = "Silica (units)"
+    y = "Silica (mcg/m3)"
   )+ 
   theme_classic()+ 
-   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ``` 
 
+Let's investigate how our data differs depending on if it was taken from the IMIS code of 9000, or if we did the calculation to get the respirable silica concentration: 
 
+```{r}
+
+#version where we facet by IMIS code 
+study_dat <- study_dat |> 
+  mutate(imis = factor(imis, levels = c("9010_9130", "9000"),
+                       labels = c("Combined Quartz and Respirable Dust", "Respirable Silica")))
+
+ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
+  geom_point(size=1, alpha = 0.5) + 
+  facet_grid(. ~ imis)+
+  scale_x_date(date_breaks = "year", date_labels = "%b %Y") +
+  labs(
+    title = "Respirable Silica Measurements by Year",
+    x = "Date",
+    y = "Silica (mcg/m3)"
+  )+ 
+  theme_classic()+ 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```  
+
+This is kind of hard to interpret. Let's add in our regulatory levels, and zoom in on our graph to see the patterns easier: 
+
+```{r}
+# Counting the observations outside the graphical limits
+n_outside <- sum(study_dat$silica_conc > 1000, na.rm = TRUE) 
+
+#Graph:
+
+ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
+  geom_point(size = 1, alpha = 0.5) +
+  
+  #regulatory references
+  geom_hline(aes(yintercept = 50, linetype = "PEL (50 mcg/m³)", color = "PEL"), 
+             linewidth = 0.8, show.legend = TRUE) +
+  geom_hline(aes(yintercept = 25, linetype = "Action Level (25 mcg/m³)", color = "Action Level"), 
+             linewidth = 0.8, show.legend = TRUE) +
+  
+  # reducing scale of graphs
+  scale_y_continuous(
+    limits = c(0, 1000),
+    breaks = seq(0, 1000, by = 200)
+  ) +
+  
+  scale_x_date(date_breaks = "year", date_labels = "%b %Y") +
+  
+  # Coloring reference lines
+  scale_color_manual(
+    values = c("PEL" = "#d62728", "Action Level" = "#ff7f0e"),
+    name = "Regulatory Limits"
+  ) +
+  scale_linetype_manual(
+    values = c("PEL (50 mcg/m³)" = "solid", "Action Level (25 mcg/m³)" = "dashed"),
+    name = "Regulatory Limits"
+  ) +
+  
+  labs(
+    title = "Respirable Silica Measurements by Year",
+    x = "Date",
+    y = "Silica (mcg/m³)",
+    caption = paste0("Note: ", n_outside, " observation(s) exceed the y-axis limit of 1,000 mcg/m³")
+  ) +
+  
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right"
+  )
+```
+
+Let's look at this a bit differently, with a bar graph that tells us how many observations exceed the PEL per year: 
+
+```{r}
+study_dat <- study_dat |> 
+  mutate(over_PEL = silica_conc >= 50) 
+
+study_dat |>
+  count(year, over_PEL) |>
+  mutate(PEL_status = if_else(over_PEL, "Exceeds PEL", "Below PEL")) |>
+  ggplot(aes(x = year, y = n, fill = PEL_status)) +
+  geom_col(position = "dodge", alpha = 0.8) +
+  geom_text(aes(label = n), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.5, 
+            size = 3) +
+  scale_fill_manual(
+    values = c("Exceeds PEL" = "#d62728", "Below PEL" = "#2ca02c"),
+    name = "Status"
+  ) +
+  labs(
+    title = "Respirable Silica Measurements: Exceeding vs. Below PEL (50 mcg/m³) by Year",
+    x = "Year",
+    y = "Count of Measurements"
+  ) +
+  theme_classic() +
+  theme(legend.position = "top")
+  
+```
