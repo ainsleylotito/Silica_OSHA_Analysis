@@ -40,13 +40,13 @@ study_dat |>
   group_by(year) |> 
   count() 
 
-ggplot(data = study_dat, aes(x = year, y = result_num))+
+ggplot(data = study_dat, aes(x = year, y = silica_conc))+
   geom_boxplot()+
-  labs(title = "Respirable Silica Measurements by Year", x = "Year", y = "Silica (units)") 
+  labs(title = "Respirable Silica Measurements by Year", x = "Year", y = "Silica (mcg/m3)") 
 
 #same, this time by date 
 
-ggplot(data = study_dat, aes(x = date_sampled, y = result_num)) +
+ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
   geom_point() +
   scale_x_date(date_breaks = "year", date_labels = "%b %Y") +
   labs(
@@ -54,7 +54,8 @@ ggplot(data = study_dat, aes(x = date_sampled, y = result_num)) +
     x = "Date",
     y = "Silica (units)"
   )+ 
-  theme_classic()
+  theme_classic()+ 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ``` 
 
 
