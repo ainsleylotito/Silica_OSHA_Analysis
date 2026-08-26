@@ -535,76 +535,63 @@ dat |>
   group_by(qualifier) |> 
   summarize(n())
 ```
- 
+## Establishment standardization
 
-## Inclusion/Exclusion   
+Now that we have our datasets for respirable silica and our calculated versions, we need to prepare for the merge by deleting duplicate entries. We have some duplicates that are the same field and lab number, due to different spellings of the establishment.  
 
-### Correct Measurement 
-
-### No blank samples 
-
-### No duplicate samples 
-
-### Only Personal Measurements 
-
-### >= 6 hrs
-
-### Personal Measurements
-
-To start, we have 2,135 observations. Next, we want to restrict our sample to only those pertaining to personal measurements.  
+We are going to make a function that resolves duplicate lab_number + field_number entries caused by inconsistent spelling.
 
 
 ```{r}
-dat |> 
-  group_by(type) |> 
-  summarize(n())
+standardize_establishment <- function(x) {
+  x |>
+    str_squish() |>                          # trim + collapse internal whitespace
+    str_to_upper() |>
+    str_replace_all("&", "AND") |>           # unify ampersand vs "AND"
+    str_replace_all("[[:punct:]]", "") |>    # strip periods, commas, hyphens, etc.
+    str_squish()                             # re-squish in case punctuation removal left double spaces
+} 
+
+
+dat <- dat |> mutate(establishment = standardize_establishment(establishment)) 
+
 ```
-We will retain 1,839 observations that used Personal measurements. We will drop those for Area measurements (n = 20), and missing data (n = 276). 
+
+
+
+## Inclusion/Exclusion    
+
+To begin, let's see how many observations we have: 
+
 ```{r}
-dat2 <- dat |> 
-  filter(type == "Personal")
+nrow(dat)
 ```
 
+We are starting with 2,135.
 
-### Removing blank samples 
+### Correct Measurement   
 
-Next we will exclude all samples that were recorded as blank. 
-
-```{r} 
-dat2 |> 
-  group_by(qualifier) |> 
-  count() 
-
-
-dat3 <- dat2 |> 
-  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t")))
-```
-We gave removed blank samples (n =1) and samples that were recorded as both ND (LOQ) and Blank (n = 368), and those recorded as ND, Blank/t (n =3).  
-
-We now have 1470 observations.
-
-
-### Correct Measurement
 
 We need our data to record a legitimate recorded measurement. First, we will check to see what the samples are recorded as when they are listed as being LOQ:
 
-```{r}
-dat3 |> 
+```{r} 
+
+dat |>  
   summarise(sum(is.na(result_num)))
 
-dat3 |> 
+dat |> 
   filter(is.na(result_num)) |> 
   group_by(qualifier) |> 
   summarise(n()) 
 
 ```
- There are 73 observations that are missing data for the recorded measurement. As such we will have to delete these observations. 
+ There are 85 observations that are missing data for the recorded measurement. As such we will have to delete these observations. 
  
 ```{r} 
-dat4 <- dat3 |> 
+dat2 <- dat |> 
   filter(!is.na(result_num))
 ```
- After removal, we now have 1,397 observations.
+ After removal, we now have 2,050 observations. 
  
 ### Removing samples lacking concentration data
 
@@ -613,7 +600,7 @@ We are only going to retain samples that contain clear units standardized to air
 To our best knowledge, the records cannot be personal air samples, and were likely bulk samples that were miscoded as personal samples.
 
 ```{r}
-dat4 <- dat4 |> 
+dat3 <- dat2 |> 
     mutate(
     result_num = case_when(
       uom == "mg" ~ result_num * 1000,      # mg → mcg (multiply by 1000)
@@ -627,29 +614,93 @@ dat4 <- dat4 |>
     )
   ) 
 
-dat4 |> 
+dat3 |> 
   group_by(uom) |> 
   summarise(n())
 ```
 
 
 
-At this time, there is only one value that is not standardized to air volume; we will now exclude it (n =1): 
+At this time, there are 572 measurements that are not in concentration form. We will exclude: 
 
 ```{r}
-dat5 <- dat4 |> 
+dat3 <- dat3 |> 
   filter(uom == "mcg/m3")
 ```
 
 We now have 1,396 observations. We will rename the results into a consistent variable name for later, called "silica_conc": 
 
 ```{r}
-dat5 <- dat5 |> 
+dat3 <- dat3 |> 
   mutate(silica_conc = result_num)
 ```
 
 
-### Removing observations that are below 6 hours in time
+### No blank samples 
+Next we will exclude all samples that were recorded as blank. 
+
+```{r} 
+dat3 |> 
+  group_by(qualifier) |> 
+  count() 
+
+
+dat4 <- dat3 |> 
+  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t")))
+```
+We gave removed blank samples (n =1) and samples that were recorded as both ND (LOQ) and Blank (n = 368), and those recorded as ND, Blank/t (n =3).  
+
+We now have 1470 observations.
+
+### No duplicate samples   
+
+We need to ensure that we don't have duplicate samples in the data.  
+
+```{r}
+nrow(dat4) #how many rows in data?  
+
+#look at duplicates 
+dat4_duplicates <- dat4 |>
+  group_by(lab_number, field_number, silica_conc, date_sampled) |>
+  filter(n() > 1) |>
+  ungroup() 
+
+dat4_duplicates |>  
+  select(lab_number, field_number, date_sampled, establishment, silica_conc) |> 
+  head()
+
+#all variables 
+dat4_duplicates |>   
+  head()
+
+dat4_dedup <- dat4|> 
+  distinct(lab_number, field_number, silica_conc, date_sampled, 
+           .keep_all = TRUE) 
+
+nrow(dat4_dedup) #how many rows are left after deleting duplicates? 
+
+
+```
+
+### Only Personal Measurements  
+
+We only want to retain personal measurements for this analysis: 
+
+```{r}
+dat4_dedup |> 
+  group_by(type) |> 
+  count() 
+
+dat5 <- dat4_dedup |> 
+  filter(type == "Personal")
+```
+
+We are left with 1,299 observations.
+
+
+### >= 6 hrs
+
+We need to ensure that we have measurements that were taken over 6 hours in length:
 
 ```{r} 
 dat5 |> 
@@ -683,7 +734,12 @@ Let's check and see how many observations we have:
 glimpse(dat6)
 ``` 
 
+Let's clean up our data too, only retaining the variables we need: 
 
+```{r}
+dat7 <- dat6 |> 
+  select(sampling_number, establishment, date_sampled, lab_number, field_number, time, imis, year, silica_conc)
+```
 
 
 # IMIS 9130 and 9010 Data Import 
@@ -719,9 +775,6 @@ range(dust2$year)
 quartz2 <-clean_osha(quartz_dat)
  
 
-quartz2 |> 
-  group_by(uom) |> 
-  summarize(n())
 ```
 
 ## Filter Quartz for percentage measurements 
@@ -730,7 +783,8 @@ We need to double check what the units of measurement and recorded numbers look 
 
 Fortunately, the variable for result is numeric, so we don't need to worry about the "<" measurements. 
 
-```{r}
+```{r} 
+nrow(quartz2)
 quartz2 |> 
   group_by(uom) |> 
   count() 
@@ -806,157 +860,119 @@ We are going to do our manual conversion to mcg from mg right now to keep things
 dust3 <- dust3 |> 
   mutate(dust_conc = result_num*1000,
          dust_uom = "mcg/m3") 
+```
 
-# Verify conversion
-cat("\nDust concentration summary statistics (in mcg/m³):\n")
-print(dust3 |> 
-  summarise(
-    min = min(dust_conc, na.rm = TRUE),
-    p25 = quantile(dust_conc, 0.25, na.rm = TRUE),
-    median = median(dust_conc, na.rm = TRUE),
-    p75 = quantile(dust_conc, 0.75, na.rm = TRUE),
-    max = max(dust_conc, na.rm = TRUE),
-    na_count = sum(is.na(dust_conc))
-  ))
+##Establishment standard 
+
+```{r}
+dust3 <- dust3 |> mutate(establishment = standardize_establishment(establishment))
+quartz3 <- quartz3 |> mutate(establishment = standardize_establishment(establishment))
 ```
 
 
-## Selecting relevant Columns 
+
+
+
+## Remove Blanks 
+
+We need to ensure that we don't have blank measurements in either the dust or quartz datasets: 
+
+```{r}
+dust3 |> 
+  group_by(qualifier) |> 
+  count()
+
+quartz3|> 
+  group_by(qualifier) |> 
+  count() 
+
+dust4 <- dust3 |> 
+  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND-BLK\t\t\t", "ND-BLK\t\t\t\t"))) 
+
+quartz4 <- quartz3 |> 
+  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND-BLK\t\t\t", "ND-BLK\t\t\t\t")))
+
+```
+
+
+## No duplicate samples 
 
 
 We only want to retain values that have the same Lab No., and values that correspond to the same date sampled. We are going to join these two datasets based on lab_number and date_sampled to be sure that the joins correspond to the same day/sample. First, we are going to rename our results from these two datasets into "dust_conc" and "quartz_pct". 
 
 ```{r}
-dust4 <- dust3 |> 
+dust4 <- dust4 |> 
   select(lab_number, date_sampled, field_number, sampling_number, 
          establishment, type, eighthr, time, dust_conc, dust_uom)
 
-quartz4 <- quartz3 |> 
+quartz4 <- quartz4 |> 
   select(lab_number, date_sampled, field_number, sampling_number, establishment,
           quartz_pct)
 ```
 
 Checks before joining: 
 
-Does either table have duplicate lab_number + date_sampled combos? 
+Does either table have duplicate lab_number + date_sampled + establishment + field_number + result combos?  
+
+Dust first:
+
+###Dust
 
 ```{r}
-dust4 |> 
-  count(lab_number, date_sampled) |> 
-  filter(n > 1) |> 
-  nrow()
 
-quartz4 |> 
-  count(lab_number, date_sampled) |> 
-  filter(n > 1) |> 
-  nrow()
-``` 
+#look at duplicates dust
+dust4_duplicates <- dust4 |>
+  group_by(lab_number, field_number, dust_conc, date_sampled) |>
+  filter(n() > 1) |>
+  ungroup() 
 
+dust4_duplicates |>  
+  arrange(lab_number, field_number, date_sampled, establishment, dust_conc) |> 
+  select(lab_number, field_number, date_sampled, establishment, dust_conc) |> 
+  head()
 
-Examining further: 
+#all variables 
+dust4_duplicates |> 
+  arrange(lab_number, field_number, date_sampled, establishment, dust_conc) |> 
+  head()
 
-```{r}
-dust4 |> 
-  add_count(lab_number, date_sampled) |> 
-  filter(n > 1) |> 
-  arrange(lab_number, date_sampled) |>
-  select(lab_number, date_sampled, field_number, dust_conc) 
-
-dust4 |> 
-  count(across(everything())) |> 
-  filter(n > 1) |> 
-  nrow()
-
-# Compare to duplication on just the key columns
-dust4 |> 
-  count(lab_number, date_sampled, field_number) |> 
-  filter(n > 1) |> 
-  nrow() 
-
-nrow(dust4) #359 duplicates?
-```
-This tells us that we also need to join on the field number, or else we will have duplicates. 
-
-
-
-## lab number inspection 
-
-```{r}
-length(intersect(quartz4$lab_number, dust4$lab_number)) 
-length(intersect(quartz4$lab_number, dust4$lab_number))
-length(unique(quartz4$lab_number))
-length(unique(dust4$lab_number))
-```
-There should be 1621 intersecting lab numbers.
-
-
-## Establishment standardization
-
-Now that we have our datasets for respirable silica and our calculated versions, we need to prepare for the merge by deleting duplicate entries. We have some duplicates that are the same field and lab number, due to different spellings of the establishment.  
-
-We are going to make a function that resolves duplicate lab_number + field_number entries caused by inconsistent spelling.
-
-
-```{r}
-standardize_establishment <- function(x) {
-  x |>
-    str_squish() |>                          # trim + collapse internal whitespace
-    str_to_upper() |>
-    str_replace_all("&", "AND") |>           # unify ampersand vs "AND"
-    str_replace_all("[[:punct:]]", "") |>    # strip periods, commas, hyphens, etc.
-    str_squish()                             # re-squish in case punctuation removal left double spaces
-} 
-
-dust4 <- dust4 |> mutate(establishment = standardize_establishment(establishment))
-dat <- dat |> mutate(establishment = standardize_establishment(establishment)) 
-quartz4 <- quartz4 |> mutate(establishment = standardize_establishment(establishment))
-```
-
-
-
-What if we try dropping establishment altogether???   
-
-Are establishment consistent with lab number? 
-
-```{r}
-dust4 |> 
-  group_by(establishment) |> 
-  summarise(n_unique_labs = n_distinct(lab_number),
-            .groups = "drop")
-
-quartz4 |> 
-  group_by(establishment) |> 
-  summarise(n_unique_labs = n_distinct(lab_number),
-            .groups = "drop")
-```
-
-
-###Removing exact duplicates 
-
-First from dust data: 
-
-```{r}
- nrow(dust4) #how many rows in data?
 dust4_dedup <- dust4|> 
   distinct(lab_number, field_number, dust_conc, date_sampled, 
-           .keep_all = TRUE)
-nrow(dust4_dedup) #how many rows are left after deleting duplicates? 
+           .keep_all = TRUE) 
 
-
+nrow(dust4_dedup) #how many rows are left after deleting duplicates?  
 ``` 
-We started with 3,633 observations; after deleting duplicates, we have 3,274 observations; 
+
+###Quartz 
+
+Next, quartz: 
 
 
-Next, for our quartz data: 
 ```{r}
+#look at duplicates quartz
+quartz4_duplicates <- quartz4 |>
+  group_by(lab_number, field_number, quartz_pct, date_sampled) |>
+  filter(n() > 1) |>
+  ungroup() 
 
- nrow(quartz4)#how many rows in data?
-quartz4_dedup <- quartz4 |> distinct(lab_number, field_number, quartz_pct, date_sampled, 
-           .keep_all = TRUE)
+quartz4_duplicates |>  
+  arrange(lab_number, field_number, date_sampled, establishment, quartz_pct) |> 
+  select(lab_number, field_number, date_sampled, establishment, quartz_pct) |> 
+  head()
+
+#all variables 
+quartz4_duplicates |>   
+  arrange(lab_number, field_number, date_sampled, establishment, quartz_pct) |> 
+  head()
+
+quartz4_dedup <- quartz4|> 
+  distinct(lab_number, field_number, quartz_pct, date_sampled, 
+           .keep_all = TRUE) 
+
 nrow(quartz4_dedup) #how many rows are left after deleting duplicates? 
-
 ```
-We started with 4,177 observations; after deleting duplicates, we have 4,053 observations.  
+
+
 
 **NOTE**: when we performed this, we lost some information about different spellings of the establishments. This will likely come up again as being problematic when we merge with the other respirable silica dataset. Something to be aware of in the future. 
 
@@ -986,12 +1002,17 @@ glimpse(quartz_merge)
 
 merged_dust_quartz <- quartz_merge|> 
   inner_join(dust_merge, by = c("lab_number", "field_number"),
-             relationship = "one-to-one") 
+             relationship = "one-to-one")  
+
+#checking how many didn't match: 
+quartz_merge|> 
+  anti_join(dust_merge, by = c("lab_number", "field_number")) |> 
+  nrow()
 
 nrow(merged_dust_quartz) 
 glimpse(merged_dust_quartz)
 ``` 
-Ok, looks like we have 1621 observations.  
+Ok, looks like we have 1211 observations.  
 
 Let's perform our calculation to get the official silica concentration, and add a variable for the year: 
 
@@ -1010,39 +1031,81 @@ merged_dust_quartz2 |>
 ```
 
 
-## Inclusion/exclusion 
-
-We need to apply the same inclusion/exclusion criteria as before. 
-
-We already removed the observations that did not contain measurements in an concentration form.  
 
 ##Personal Measures 
 
+We need to ensure that we are only retaining measurements that are personal:
+
+```{r}
+merged_dust_quartz2 |> 
+  group_by(type) |> 
+  count() 
+
+merged_dust_quartz3 <- merged_dust_quartz2|> 
+  filter(type == "Personal")
+```
 
 
+## >= 6 hrs 
 
+```{r} 
+merged_dust_quartz3 |> 
+  mutate(six_hours = time >= 6) |>
+  filter(six_hours == "TRUE") |> 
+  group_by( year) |> 
+  summarise(n()) #checking that we have enough observations
 
+merged_dust_quartz3|> 
+  filter(is.na(time)) |> 
+  count() 
+merged_dust_quartz3|> 
+  filter(time < 6) |> 
+  count() 
 
+merged_dust_quartz3 |> 
+  filter(time < 6 & is.na(time)) |> 
+  count() 
+
+merged_dust_quartz4 <- merged_dust_quartz3|> 
+  filter(!(time < 6 & !is.na(time)))
+``` 
 
 # Merge Respirable and Calculated data 
 
 Lastly, we need to merge our quartz and dust datasets with the respirable dataset. Before we do this, we need to make sure we include only the relevant variables, as well as make a consistent respirable concentration variable that only has results in mcg/m3.  
 
-Variables to drop from dat: air_volume, weight, substance, qualifier, inspection. Add: "silica_conc"
 
 Variables to add from merged_dust_quarts: imis (val = 9010_9130) 
-To drop: quartz_pct, dust_conc, dust_uom.
+To drop: quartz_pct, dust_conc, dust_uom. 
 
 ```{r}
-combined_dat <- bind_rows(dat, merged_dust_quartz2)
-nrow(combined_dat) 
-glimpse(combined_dat)
+merged_dust_quartz5 <- merged_dust_quartz4 |> 
+  select(-quartz_pct, -dust_conc, -dust_uom) |> 
+  mutate(imis = "9010_9130") 
+
+dat7 <- dat7 |> 
+  mutate(imis = as.character(imis))
 ```
 
-#OEL data addition
+```{r}
+combined_dat <- bind_rows(dat7, merged_dust_quartz5)
+nrow(combined_dat) 
+glimpse(combined_dat)
+``` 
+
+#Data check 
+
+We want to see how many observations we have per year, as well as check for potential outliers: 
+
+```{r}
+
+
+```
+
+
 
 Let's save our analytic dataset: 
 
 ```{r}
-write_csv(dat6, "../CleanData/study_dat.csv")
+write_csv(combined_dat, "../CleanData/study_dat.csv")
 ```
