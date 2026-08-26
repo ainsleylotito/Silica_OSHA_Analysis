@@ -1098,11 +1098,42 @@ glimpse(combined_dat)
 We want to see how many observations we have per year, as well as check for potential outliers: 
 
 ```{r}
+summary(combined_dat$silica_conc)
+Q1 <- quantile(combined_dat$silica_conc, 0.25, na.rm = TRUE)
+Q3 <- quantile(combined_dat$silica_conc, 0.75, na.rm = TRUE)
+IQR_value <- IQR(combined_dat$silica_conc, na.rm = TRUE)
 
+lower_bound <- Q1 - 1.5 * IQR_value
+upper_bound <- Q3 + 1.5 * IQR_value
 
+lower_bound
+upper_bound 
+outliers <- combined_dat |> 
+  filter(silica_conc < lower_bound | silica_conc > upper_bound)
+
+outliers 
+
+combined_dat |> 
+  slice_max(silica_conc, n = 5)
 ```
+For our outliers, we want to be certain that none of these started as a different unit of measurement. We will compare with our original database: 
 
+```{r}
+outlier_field_no <- combined_dat |> 
+  slice_max(silica_conc, n = 5) |> 
+  pull(field_number)  
 
+outlier_field_no 
+
+dat |> 
+  filter(field_number %in% outlier_field_no) |> 
+  select(uom, result_num, eighthr) 
+
+combined_dat |> 
+  group_by(eighthr) |> 
+  count()
+```
+Ok, all of these started off as mcg/m3 interestingly. We cannot chalk it up to being incorrect measurement classification.
 
 Let's save our analytic dataset: 
 
