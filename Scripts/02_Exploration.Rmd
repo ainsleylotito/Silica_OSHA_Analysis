@@ -18,7 +18,8 @@ library(lubridate)
 library(janitor) 
 library(viridis) 
 library(sandwich)
-library(lmtest)
+library(lmtest) 
+library(broom)
 
 
 # Global options
@@ -219,7 +220,7 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
 Let's look at this a bit differently, with a bar graph that tells us how many observations exceed the PEL per year: 
 
 ```{r}
-study_dat <- study_dat |> 
+ study_dat <- study_dat |> 
   mutate(over_PEL = silica_conc >= 50) 
 
 study_dat |>
@@ -332,7 +333,9 @@ Very interesting, this time we see a small reduction in concentration over the y
 
 Let's proceed investigating this, adding in our random effect for establishment to establish whether there is within-group variation: 
 
-```{r}
+```{r} 
+
+
 coeftest(mod_linear_reg, 
          vcov = vcovCL(mod_linear_reg, 
                        cluster = ~ establishment,
@@ -341,7 +344,11 @@ coeftest(mod_linear_reg,
 
 ``` 
 
-Not much has changed at all! 
+Not much has changed at all!   
+
+
+
+### Over PEL
 
 What if we instead investigate a logistic model that investigates whether the number of facilities exceeding the PEL has changed over the years? 
 
@@ -361,4 +368,68 @@ coeftest(mod_logistic,
                        type = "HC1")) 
 ``` 
 
-Looks like it is slightly less significant, but still there! Let's interpret our outcome more clearly: 
+Looks like it is slightly less significant, but still there! Let's interpret our outcome more clearly:  
+
+```{r}
+mod_log_cluster <- coeftest(mod_logistic,
+         vcov = vcovCL(mod_logistic,
+                       cluster = ~ establishment,
+                       type = "HC1"))   
+mod_log_cluster
+
+tidy_result <- tibble(
+  term = rownames(mod_log_cluster),
+  estimate = exp(mod_log_cluster[,"Estimate"]),
+  std.error = mod_log_cluster[, "Std. Error"],
+  statistic = mod_log_cluster[, "z value"],
+  p.value = mod_log_cluster[, "Pr(>|z|)"]
+) %>%
+  mutate(
+    conf.low = exp(log(estimate) - 1.96 * std.error),
+    conf.high = exp(log(estimate) + 1.96 * std.error)
+  ) %>%
+  select(term, estimate, conf.low, conf.high, std.error, statistic, p.value)
+
+tidy_result |> 
+  mutate(across(where(is.numeric), ~round(., 3)))
+
+``` 
+
+It looks like we see a slight decrease in the odds of the measurements being above PEL annually, controlling for the variation of each individual establishment.  
+
+### Over Action Level 
+
+What about the odds of annual measurements exceeding the action level? 
+
+```{r}
+dat_06 <- dat_06 |> 
+  mutate(over_action = silica_conc >= 25)   
+
+mod_logistic2  <- glm(over_action~year, data = dat_06, 
+                     family = binomial)
+summary(mod_logistic2)
+
+mod_log_cluster2 <- coeftest(mod_logistic2,
+         vcov = vcovCL(mod_logistic2,
+                       cluster = ~ establishment,
+                       type = "HC1"))   
+mod_log_cluster2
+
+tidy_result2 <- tibble(
+  term = rownames(mod_log_cluster2),
+  estimate = exp(mod_log_cluster2[,"Estimate"]),
+  std.error = mod_log_cluster2[, "Std. Error"],
+  statistic = mod_log_cluster2[, "z value"],
+  p.value = mod_log_cluster2[, "Pr(>|z|)"]
+) %>%
+  mutate(
+    conf.low = exp(log(estimate) - 1.96 * std.error),
+    conf.high = exp(log(estimate) + 1.96 * std.error)
+  ) %>%
+  select(term, estimate, conf.low, conf.high, std.error, statistic, p.value)
+
+tidy_result2 |> 
+  mutate(across(where(is.numeric), ~round(., 3)))
+
+```
+There is no significant change in measurements exceeding the action level by year. 
