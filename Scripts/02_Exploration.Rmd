@@ -88,11 +88,30 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
   theme_classic()+ 
    theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ```
-This may not be possible to see or use, as we may not have enough observations to appropriately fit our time series with year. 
+This may not be possible to see or use, as we may not have enough observations to appropriately fit our time series with year. We can try "zooming in": 
+
+```{r} 
+ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
+  geom_point(size=1, alpha = 0.5) + 
+  geom_smooth()+
+  scale_x_date(date_breaks = "year", date_labels = "%b %Y") +
+  labs(
+    title = "Respirable Silica Measurements by Year",
+    x = "Date",
+    y = "Silica (mcg/m3)"
+  )+ 
+  theme_classic()+ 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+scale_y_continuous(
+    limits = c(0, 500),
+    breaks = seq(0, 500, by = 100)
+  ) 
+```
+Interesting, it looks like there is no clear trend here. We could attempt a nonlinear model? 
 
 
 
-This is kind of hard to interpret. Let's add in our regulatory levels, and zoom in on our graph to see the patterns easier: 
+Let's add in our regulatory levels, and zoom in on our graph to see the patterns easier: 
 
 ```{r}
 # Counting the observations outside the graphical limits
@@ -193,4 +212,60 @@ study_dat |>
   theme_classic() +
   theme(legend.position = "top")
   
+``` 
+
+What about how many establishments are the same? 
+
+```{r}
+study_dat |> 
+  group_by(establishment) |> 
+  count() |> 
+  filter(n>1)
+``` 
+Looks like there are 285 distinct establishments that have the same name. But something to consider is that our establishment sometimes has pretty similar naming conventions. These likely refer to the same institutions, just with some differences in terms of naming. We can look at this further: 
+
+```{r} 
+library(stringdist)
+standardize_establishment <- function(x) {
+  x |>
+    str_squish() |>                          # trim + collapse internal whitespace
+    str_to_upper() |>
+    str_replace_all("&", "AND") |>           # unify ampersand vs "AND"
+    str_replace_all("[[:punct:]]", "") |>    # strip periods, commas, hyphens, etc.
+    str_squish()                             # re-squish in case punctuation removal left double spaces
+} 
+study_dat <- study_dat |> mutate(establishment = standardize_establishment(establishment)) 
+
+
+study_dat |> 
+  group_by(establishment) |> 
+  count() |> 
+  filter(n>1)
 ```
+
+That helped reduce it down to 268, but we still see some examples where the spellings are inconsistent. We may need to be a bit more literal when we explore this by identifying the exact instances where establishments are mislabeled.  
+
+```{r}
+study_dat |> 
+  group_by(establishment) |> 
+  count()
+```
+
+Going through the list, FORTUNATELY only one establishment appears to be the same: 
+1. "ALL GRANITE AND MARBLE CORP" and "ALL GRANITE AND MARBLE CORPORATION"  
+
+Let's look at how the establishments change the distribution of silica:
+
+```{r}
+multiple_obs <- study_dat |> 
+  group_by(establishment) |> 
+  count() |> 
+  filter(n>1) |> 
+  pull(establishment)
+
+study_dat |> 
+  filter(establishment %in% multiple_obs) |> 
+  group_by(establishment) |> 
+  summarize(mean = round(mean(silica_conc), 2), sd = round(sd(silica_conc), 2))
+```
+We can see that there is a lot of individual variation in the data. We can also assume that some of these are being skewed by really dramatic outliers (take, for example, CL Granite and marble llc, whose mean silica is 1,376 with an sd of 2,478.07).
