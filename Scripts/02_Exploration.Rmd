@@ -15,7 +15,11 @@ library(tidyverse)
 library(ggplot2) 
 library(readxl) 
 library(lubridate)
-library(janitor)
+library(janitor) 
+library(viridis) 
+library(sandwich)
+library(lmtest)
+
 
 # Global options
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
@@ -31,7 +35,19 @@ study_dat <- study_dat |>
 
 [enter introduction l8r]
 
-# General Data Summaries 
+# General Data Summaries  
+
+## Study Period 
+
+I.E., what dates/years are covered by the time series data? 
+
+```{r}
+range(study_dat$date_sampled)
+```
+
+We have data spanning Feb of 2004 to May of 2026. 
+
+
 
 ## Observations by Year 
 
@@ -54,11 +70,22 @@ study_dat |>
 
 ```
 
+We have the most observations in 2024. We are also missing data for the year 2005.  
+
+
+```{r}
+summary(study_dat$year)
+```
+## Respirable silica by year 
+
+Let's plot our respirable silica concentration measurements through our study period: 
+
 ```{r}
 
 ggplot(data = study_dat, aes(x = year, y = silica_conc))+
   geom_boxplot()+
-  labs(title = "Respirable Silica Measurements by Year", x = "Year", y = "Silica (mcg/m3)") 
+  labs(title = "Respirable Silica Measurements by Year", x = "Year", y = "Silica (mcg/m3)") +
+  theme_classic()
 
 #same, this time by date 
 
@@ -73,6 +100,7 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
   theme_classic()+ 
    theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ``` 
+
 Let's try adding in a smooth line to see if there are any apparent long-term patterns: 
 
 ```{r}
@@ -88,6 +116,7 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
   theme_classic()+ 
    theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ```
+
 This may not be possible to see or use, as we may not have enough observations to appropriately fit our time series with year. We can try "zooming in": 
 
 ```{r} 
@@ -107,8 +136,10 @@ scale_y_continuous(
     breaks = seq(0, 500, by = 100)
   ) 
 ```
-Interesting, it looks like there is no clear trend here. We could attempt a nonlinear model? 
 
+Interesting, it looks like there is no clear trend here. We could attempt a nonlinear model?  
+
+Also, there does not appear to be any seasonality in our data. 
 
 
 Let's add in our regulatory levels, and zoom in on our graph to see the patterns easier: 
@@ -268,4 +299,66 @@ study_dat |>
   group_by(establishment) |> 
   summarize(mean = round(mean(silica_conc), 2), sd = round(sd(silica_conc), 2))
 ```
-We can see that there is a lot of individual variation in the data. We can also assume that some of these are being skewed by really dramatic outliers (take, for example, CL Granite and marble llc, whose mean silica is 1,376 with an sd of 2,478.07).
+We can see that there is a lot of individual variation in the data. We can also assume that some of these are being skewed by really dramatic outliers (take, for example, CL Granite and marble llc, whose mean silica is 1,376 with an sd of 2,478.07). 
+
+# Sequential modeling 
+
+Let's start fitting our time series model to this data. We will start with a simple model that looks at the association between year and the silica conc: 
+
+```{r}
+mod_linear_reg <- glm(silica_conc ~ year, data = study_dat) 
+summary(mod_linear_reg)
+```
+ 
+That gave us the trend when year is a character variable. Since we are missing 2005, we may need to initalize our data at year 2005. Then we can create a year counter for the year in the study, and estimate a numeric result: 
+
+### Subsetting data to exclude year 2005 
+
+```{r}
+dat_06 <- study_dat |> 
+  filter(date_sampled > "2005-12-31") |> 
+  mutate(year = as.numeric(year))
+``` 
+
+Doing so has reduced our sample size down to 1,043.  
+
+Let's try our glm again: 
+```{r}
+mod_linear_reg <- glm(silica_conc ~ year, data = dat_06)
+summary(mod_linear_reg)
+```
+
+Very interesting, this time we see a small reduction in concentration over the years, but this is VERY insignificant. 
+
+Let's proceed investigating this, adding in our random effect for establishment to establish whether there is within-group variation: 
+
+```{r}
+coeftest(mod_linear_reg, 
+         vcov = vcovCL(mod_linear_reg, 
+                       cluster = ~ establishment,
+                       type = "HC1")) 
+
+
+``` 
+
+Not much has changed at all! 
+
+What if we instead investigate a logistic model that investigates whether the number of facilities exceeding the PEL has changed over the years? 
+
+```{r}
+mod_logistic  <- glm(over_PEL~year, data = dat_06, 
+                     family = binomial)
+summary(mod_logistic)
+``` 
+
+We should not need to control for establishment here, since we are only looking at whether the proportion of facilities over PEL changed by year, but we can add in a random effect for establishment either way: 
+
+```{r}
+
+coeftest(mod_logistic,
+         vcov = vcovCL(mod_logistic,
+                       cluster = ~ establishment,
+                       type = "HC1")) 
+``` 
+
+Looks like it is slightly less significant, but still there! Let's interpret our outcome more clearly: 
