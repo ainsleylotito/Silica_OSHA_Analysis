@@ -1617,9 +1617,11 @@ of hours instead of minutes. Adding indicator in case of data being
 “less than” values, so we can go back in and perhaps do a sensitivity
 analysis of some kind or just have the knowledge that they were less
 than that number.</p>
-<p>To start, let’s simply apply some reformats to our data:</p>
-<pre class="r"><code>dat &lt;- raw_dat |&gt; 
-  rename_with(tolower) |&gt; 
+<p>To start, let’s simply apply some reformats to our data. We will make
+this a function to save time later:</p>
+<pre class="r"><code>clean_osha &lt;- function(df){
+  df |&gt; 
+    rename_with(tolower) |&gt; 
   mutate(
     date_sampled = dmy(date_sampled), 
     year = year(date_sampled), 
@@ -1627,13 +1629,22 @@ than that number.</p>
                           &quot;Personal&quot; = &quot;P&quot;,
                           &quot;Area&quot; = &quot;A&quot;,
                           &quot;Bulk&quot; = &quot;B&quot;, 
-                          &quot;Wipe&quot; = &quot;W&quot;), 
+                          &quot;Wipe&quot; = &quot;W&quot;),  
+    uom = fct_recode(uom,
+                          &quot;mg&quot; = &quot;MG&quot;, #milligrams
+                          &quot;mg&quot; = &quot;Y&quot;, #milligrams
+                          &quot;mcg&quot; = &quot;X&quot;, #micrograms
+                          &quot;mcg/m3&quot; = &quot;MCG/M3&quot;, #micrograms/m3
+                          &quot;mg/m3&quot; = &quot;MG_M3&quot;, #milligrams/m3
+                          &quot;mg/m3&quot; = &quot;M&quot;), #milligrams/m3
     blank = as.logical(blank),
     time = time/60,
     less_than_measurement = grepl(&quot;^\\s*&lt;&quot;, result),
     result_num = as.numeric(gsub(&quot;&lt;\\s*&quot;, &quot;&quot;, result))
     ) |&gt; 
-  select(-office, -naics, -date_reported, -lab_number, -csho, -sic)</code></pre>
+  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
+}
+dat &lt;- clean_osha(raw_dat) </code></pre>
 <div id="examination" class="section level3" number="1.1.1">
 <h3><span class="header-section-number">1.1.1</span> Examination</h3>
 <p>Let’s first see how many years our data spans:</p>
@@ -1641,39 +1652,6 @@ than that number.</p>
 <pre><code>## [1] &quot;2017-08-18&quot; &quot;2026-05-14&quot;</code></pre>
 <p>We want to check some of these variables to see whether they are
 relevant to be included (i.e., contain multiple levels).</p>
-<p>Let’s check what different values are in the data for
-<code>instrument</code>, <code>blank</code>, <code>weight</code>, and
-<code>uom</code>.</p>
-<pre class="r"><code>dat |&gt; 
-  group_by(instrument) |&gt; 
-  summarize(n()) </code></pre>
-<pre><code>## # A tibble: 1 × 2
-##   instrument `n()`
-##   &lt;lgl&gt;      &lt;int&gt;
-## 1 NA          2135</code></pre>
-<pre class="r"><code>dat |&gt; 
-  group_by(blank) |&gt; 
-  summarize(n()) </code></pre>
-<pre><code>## # A tibble: 1 × 2
-##   blank `n()`
-##   &lt;lgl&gt; &lt;int&gt;
-## 1 NA     2135</code></pre>
-<pre class="r"><code>summary(dat$weight)</code></pre>
-<pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.     NAs 
-##  0.0000  0.0150  0.0530  0.2887  0.1675 16.1420     569</code></pre>
-<pre class="r"><code>dat |&gt; 
-  group_by(uom) |&gt; 
-  summarize(n()) </code></pre>
-<pre><code>## # A tibble: 7 × 2
-##   uom    `n()`
-##   &lt;chr&gt;  &lt;int&gt;
-## 1 M        202
-## 2 MCG/M3  1236
-## 3 MG       123
-## 4 MG_M3     69
-## 5 X        306
-## 6 Y        143
-## 7 &lt;NA&gt;      56</code></pre>
 <p>It looks like we only have NA values for instrument and blank; we can
 drop. We do have information for weight that may be needed.</p>
 <p>For the unit of measurement, according to the data dictionary, M =
@@ -1718,34 +1696,16 @@ cubed.</p>
     non_na_values = sum(!is.na(air_volume)),
     na_count = sum(is.na(air_volume))
   )</code></pre>
-<pre><code>## # A tibble: 4 × 4
-##   uom   total_rows non_na_values na_count
-##   &lt;chr&gt;      &lt;int&gt;         &lt;int&gt;    &lt;int&gt;
-## 1 M             60            57        3
-## 2 MG            30             0       30
-## 3 X             96             0       96
-## 4 Y             36             0       36</code></pre>
+<pre><code>## # A tibble: 0 × 4
+## # ℹ 4 variables: uom &lt;fct&gt;, total_rows &lt;int&gt;, non_na_values &lt;int&gt;,
+## #   na_count &lt;int&gt;</code></pre>
 <p>It appears that we have some data that is missing air volume
 specifically. We will need to double check which rows are missing air
 volume after we exclude non-personal samples, and then look into
 creating a standardized measurement.</p>
 <p>Let’s apply some reformatting again with the new information.<br />
 M = mg/m^3, X = micrograms, Y = milligrams.</p>
-<pre class="r"><code>dat &lt;- dat |&gt; 
-  select(-instrument, -blank) |&gt; 
-  mutate(
-    uom = fct_recode(uom,
-                          &quot;mg&quot; = &quot;MG&quot;, #milligrams
-                          &quot;mg&quot; = &quot;Y&quot;, #milligrams
-                          &quot;mcg&quot; = &quot;X&quot;, #micrograms
-                          &quot;mcg/m3&quot; = &quot;MCG/M3&quot;, #micrograms/m3
-                          &quot;mg/m3&quot; = &quot;MG_M3&quot;, #milligrams/m3
-                          &quot;mg/m3&quot; = &quot;M&quot; #milligrams/m3
-                     )
-    )
-  
-
-dat |&gt; 
+<pre class="r"><code>dat |&gt; 
   group_by(uom) |&gt; 
   summarize(n())</code></pre>
 <pre><code>## # A tibble: 5 × 2
@@ -2125,20 +2085,21 @@ on how many of them used a time-weighted average.</p>
 <pre class="r"><code>dat |&gt; 
   filter(eighthr == &quot;STEL CEILING PEAK&quot;) |&gt;
   select(everything())  # STEL information </code></pre>
-<pre><code>## # A tibble: 8 × 18
-##   inspection sampling_number establishment date_sampled eighthr     field_number
-##        &lt;dbl&gt; &lt;chr&gt;           &lt;chr&gt;         &lt;date&gt;       &lt;chr&gt;       &lt;chr&gt;       
-## 1    1863156 484899-OIS      GRANITE USA   2025-12-17   STEL CEILI… 3B1         
-## 2    1863156 484896-OIS      GRANITE USA   2025-12-17   STEL CEILI… 2B2         
-## 3    1863156 484899-OIS      GRANITE USA   2025-12-17   STEL CEILI… 3B2         
-## 4    1863156 484900-OIS      GRANITE USA   2025-12-17   STEL CEILI… 5B1         
-## 5    1863156 484900-OIS      GRANITE USA   2025-12-17   STEL CEILI… 5B2         
-## 6    1863156 484896-OIS      GRANITE USA   2025-12-17   STEL CEILI… 2B1         
-## 7    1863156 484901-OIS      GRANITE USA   2025-12-17   STEL CEILI… 4B1         
-## 8    1863156 484901-OIS      GRANITE USA   2025-12-17   STEL CEILI… 4B2         
-## # ℹ 12 more variables: type &lt;fct&gt;, time &lt;dbl&gt;, air_volume &lt;dbl&gt;, weight &lt;dbl&gt;,
-## #   imis &lt;dbl&gt;, substance &lt;chr&gt;, result &lt;chr&gt;, uom &lt;fct&gt;, qualifier &lt;chr&gt;,
-## #   year &lt;dbl&gt;, less_than_measurement &lt;lgl&gt;, result_num &lt;dbl&gt;</code></pre>
+<pre><code>## # A tibble: 8 × 19
+##   inspection sampling_number establishment date_sampled eighthr       lab_number
+##        &lt;dbl&gt; &lt;chr&gt;           &lt;chr&gt;         &lt;date&gt;       &lt;chr&gt;         &lt;chr&gt;     
+## 1    1863156 484899-OIS      GRANITE USA   2025-12-17   STEL CEILING… 56964     
+## 2    1863156 484896-OIS      GRANITE USA   2025-12-17   STEL CEILING… 56962     
+## 3    1863156 484899-OIS      GRANITE USA   2025-12-17   STEL CEILING… 56965     
+## 4    1863156 484900-OIS      GRANITE USA   2025-12-17   STEL CEILING… 56966     
+## 5    1863156 484900-OIS      GRANITE USA   2025-12-17   STEL CEILING… 56967     
+## 6    1863156 484896-OIS      GRANITE USA   2025-12-17   STEL CEILING… 56961     
+## 7    1863156 484901-OIS      GRANITE USA   2025-12-17   STEL CEILING… 56969     
+## 8    1863156 484901-OIS      GRANITE USA   2025-12-17   STEL CEILING… 56968     
+## # ℹ 13 more variables: field_number &lt;chr&gt;, type &lt;fct&gt;, time &lt;dbl&gt;,
+## #   air_volume &lt;dbl&gt;, weight &lt;dbl&gt;, imis &lt;dbl&gt;, substance &lt;chr&gt;, result &lt;chr&gt;,
+## #   uom &lt;fct&gt;, qualifier &lt;chr&gt;, year &lt;dbl&gt;, less_than_measurement &lt;lgl&gt;,
+## #   result_num &lt;dbl&gt;</code></pre>
 <pre class="r"><code>#examining time distribution by the time-weighted data: 
 dat |&gt; 
   group_by(eighthr) |&gt;  
@@ -2373,8 +2334,71 @@ the mg/m3 observations:</p>
 ##   qualifier `n()`
 ##   &lt;chr&gt;     &lt;int&gt;
 ## 1 &lt;NA&gt;        271</code></pre>
-<p>Let’s convert the units accordingly:</p>
-<pre class="r"><code>dat &lt;- dat |&gt; 
+</div>
+</div>
+<div id="establishment-standardization" class="section level2" number="1.3">
+<h2><span class="header-section-number">1.3</span> Establishment
+standardization</h2>
+<p>Now that we have our datasets for respirable silica and our
+calculated versions, we need to prepare for the merge by deleting
+duplicate entries. We have some duplicates that are the same field and
+lab number, due to different spellings of the establishment.</p>
+<p>We are going to make a function that resolves duplicate lab_number +
+field_number entries caused by inconsistent spelling.</p>
+<pre class="r"><code>standardize_establishment &lt;- function(x) {
+  x |&gt;
+    str_squish() |&gt;                          # trim + collapse internal whitespace
+    str_to_upper() |&gt;
+    str_replace_all(&quot;&amp;&quot;, &quot;AND&quot;) |&gt;           # unify ampersand vs &quot;AND&quot;
+    str_replace_all(&quot;[[:punct:]]&quot;, &quot;&quot;) |&gt;    # strip periods, commas, hyphens, etc.
+    str_squish()                             # re-squish in case punctuation removal left double spaces
+} 
+
+
+dat &lt;- dat |&gt; mutate(establishment = standardize_establishment(establishment)) </code></pre>
+</div>
+<div id="inclusionexclusion" class="section level2" number="1.4">
+<h2><span class="header-section-number">1.4</span>
+Inclusion/Exclusion</h2>
+<p>To begin, let’s see how many observations we have:</p>
+<pre class="r"><code>nrow(dat)</code></pre>
+<pre><code>## [1] 2135</code></pre>
+<p>We are starting with 2,135.</p>
+<div id="correct-measurement" class="section level3" number="1.4.1">
+<h3><span class="header-section-number">1.4.1</span> Correct
+Measurement</h3>
+<p>We need our data to record a legitimate recorded measurement. First,
+we will check to see what the samples are recorded as when they are
+listed as being LOQ:</p>
+<pre class="r"><code>dat |&gt;  
+  summarise(sum(is.na(result_num)))</code></pre>
+<pre><code>## # A tibble: 1 × 1
+##   `sum(is.na(result_num))`
+##                      &lt;int&gt;
+## 1                       85</code></pre>
+<pre class="r"><code>dat |&gt; 
+  filter(is.na(result_num)) |&gt; 
+  group_by(qualifier) |&gt; 
+  summarise(n()) </code></pre>
+<pre><code>## # A tibble: 1 × 2
+##   qualifier `n()`
+##   &lt;chr&gt;     &lt;int&gt;
+## 1 &lt;NA&gt;         85</code></pre>
+<p>There are 85 observations that are missing data for the recorded
+measurement. As such we will have to delete these observations.</p>
+<pre class="r"><code>dat2 &lt;- dat |&gt; 
+  filter(!is.na(result_num))</code></pre>
+<p>After removal, we now have 2,050 observations.</p>
+</div>
+<div id="removing-samples-lacking-concentration-data" class="section level3" number="1.4.2">
+<h3><span class="header-section-number">1.4.2</span> Removing samples
+lacking concentration data</h3>
+<p>We are only going to retain samples that contain clear units
+standardized to air volume. We cannot convert our observations to a
+concentration that are standalones, since they lack air volume data.</p>
+<p>To our best knowledge, the records cannot be personal air samples,
+and were likely bulk samples that were miscoded as personal samples.</p>
+<pre class="r"><code>dat3 &lt;- dat2 |&gt; 
     mutate(
     result_num = case_when(
       uom == &quot;mg&quot; ~ result_num * 1000,      # mg → mcg (multiply by 1000)
@@ -2386,18 +2410,193 @@ the mg/m3 observations:</p>
       uom == &quot;mg/m3&quot; ~ &quot;mcg/m3&quot;,
       TRUE ~ uom
     )
-  )
-dat|&gt; 
+  ) 
+
+dat3 |&gt; 
   group_by(uom) |&gt; 
-summarize(n= n(),
-            mean = mean(result_num, na.rm=TRUE),
-            sd = sd(result_num,na.rm=TRUE))</code></pre>
-<pre><code>## # A tibble: 3 × 4
-##   uom        n   mean     sd
-##   &lt;chr&gt;  &lt;int&gt;  &lt;dbl&gt;  &lt;dbl&gt;
-## 1 mcg      572   4.93   5.50
-## 2 mcg/m3  1507 104.   387.  
-## 3 &lt;NA&gt;      56 NaN     NA</code></pre>
+  summarise(n())</code></pre>
+<pre><code>## # A tibble: 2 × 2
+##   uom    `n()`
+##   &lt;chr&gt;  &lt;int&gt;
+## 1 mcg      572
+## 2 mcg/m3  1478</code></pre>
+<p>At this time, there are 572 measurements that are not in
+concentration form. We will exclude:</p>
+<pre class="r"><code>dat3 &lt;- dat3 |&gt; 
+  filter(uom == &quot;mcg/m3&quot;)</code></pre>
+<p>We now have 1,396 observations. We will rename the results into a
+consistent variable name for later, called “silica_conc”:</p>
+<pre class="r"><code>dat3 &lt;- dat3 |&gt; 
+  mutate(silica_conc = result_num)</code></pre>
+</div>
+<div id="no-blank-samples" class="section level3" number="1.4.3">
+<h3><span class="header-section-number">1.4.3</span> No blank
+samples</h3>
+<p>Next we will exclude all samples that were recorded as blank.</p>
+<pre class="r"><code>dat3 |&gt; 
+  group_by(qualifier) |&gt; 
+  count() </code></pre>
+<pre><code>## # A tibble: 9 × 2
+## # Groups:   qualifier [9]
+##   qualifier      n
+##   &lt;chr&gt;      &lt;int&gt;
+## 1 &quot;&lt;=&quot;           8
+## 2 &quot;&lt;=\t&quot;         1
+## 3 &quot;=&lt;&quot;           1
+## 4 &quot;@&quot;           13
+## 5 &quot;ND&quot;         463
+## 6 &quot;ND\t&quot;        16
+## 7 &quot;ND-BLK&quot;      71
+## 8 &quot;ND-BLK\t&quot;     3
+## 9  &lt;NA&gt;        902</code></pre>
+<pre class="r"><code>dat4 &lt;- dat3 |&gt; 
+  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;)))</code></pre>
+<p>We gave removed blank samples (n =1) and samples that were recorded
+as both ND (LOQ) and Blank (n = 368), and those recorded as ND, Blank/t
+(n =3).</p>
+<p>We now have 1470 observations.</p>
+</div>
+<div id="no-duplicate-samples" class="section level3" number="1.4.4">
+<h3><span class="header-section-number">1.4.4</span> No duplicate
+samples</h3>
+<p>We need to ensure that we don’t have duplicate samples in the
+data.</p>
+<pre class="r"><code>nrow(dat4) #how many rows in data?  </code></pre>
+<pre><code>## [1] 1407</code></pre>
+<pre class="r"><code>#look at duplicates 
+dat4_duplicates &lt;- dat4 |&gt;
+  group_by(lab_number, field_number, silica_conc, date_sampled) |&gt;
+  filter(n() &gt; 1) |&gt;
+  ungroup() 
+
+dat4_duplicates |&gt;  
+  select(lab_number, field_number, date_sampled, establishment, silica_conc) |&gt; 
+  head()</code></pre>
+<pre><code>## # A tibble: 6 × 5
+##   lab_number field_number date_sampled establishment                 silica_conc
+##   &lt;chr&gt;      &lt;chr&gt;        &lt;date&gt;       &lt;chr&gt;                               &lt;dbl&gt;
+## 1 F30195     01581D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…       214  
+## 2 F30196     08368D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…        43.9
+## 3 F30195     01581D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…       214  
+## 4 F30196     08368D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…        43.9
+## 5 F30067     07870E       2023-11-01   W C CANNIFF AND SONS INC              0  
+## 6 F30067     07870E       2023-11-01   WC CANNIFF AND SONS INC               0</code></pre>
+<pre class="r"><code>#all variables 
+dat4_duplicates |&gt;   
+  head()</code></pre>
+<pre><code>## # A tibble: 6 × 20
+##   inspection sampling_number establishment       date_sampled eighthr lab_number
+##        &lt;dbl&gt; &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;   &lt;chr&gt;     
+## 1    1690207 433379          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30195    
+## 2    1690207 433380          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30196    
+## 3    1690207 433379          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30195    
+## 4    1690207 433380          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30196    
+## 5    1694359 433269          W C CANNIFF AND SO… 2023-11-01   Y       F30067    
+## 6    1694359 433269          WC CANNIFF AND SON… 2023-11-01   Y       F30067    
+## # ℹ 14 more variables: field_number &lt;chr&gt;, type &lt;fct&gt;, time &lt;dbl&gt;,
+## #   air_volume &lt;dbl&gt;, weight &lt;dbl&gt;, imis &lt;dbl&gt;, substance &lt;chr&gt;, result &lt;chr&gt;,
+## #   uom &lt;chr&gt;, qualifier &lt;chr&gt;, year &lt;dbl&gt;, less_than_measurement &lt;lgl&gt;,
+## #   result_num &lt;dbl&gt;, silica_conc &lt;dbl&gt;</code></pre>
+<pre class="r"><code>dat4_dedup &lt;- dat4|&gt; 
+  distinct(lab_number, field_number, silica_conc, date_sampled, 
+           .keep_all = TRUE) 
+
+nrow(dat4_dedup) #how many rows are left after deleting duplicates? </code></pre>
+<pre><code>## [1] 1308</code></pre>
+</div>
+<div id="only-personal-measurements" class="section level3" number="1.4.5">
+<h3><span class="header-section-number">1.4.5</span> Only Personal
+Measurements</h3>
+<p>We only want to retain personal measurements for this analysis:</p>
+<pre class="r"><code>dat4_dedup |&gt; 
+  group_by(type) |&gt; 
+  count() </code></pre>
+<pre><code>## # A tibble: 2 × 2
+## # Groups:   type [2]
+##   type         n
+##   &lt;fct&gt;    &lt;int&gt;
+## 1 Area         9
+## 2 Personal  1299</code></pre>
+<pre class="r"><code>dat5 &lt;- dat4_dedup |&gt; 
+  filter(type == &quot;Personal&quot;)</code></pre>
+<p>We are left with 1,299 observations.</p>
+</div>
+<div id="hrs" class="section level3" number="1.4.6">
+<h3><span class="header-section-number">1.4.6</span> &gt;= 6 hrs</h3>
+<p>We need to ensure that we have measurements that were taken over 6
+hours in length:</p>
+<pre class="r"><code>dat5 |&gt; 
+  mutate(six_hours = time &gt;= 6) |&gt;
+  filter(six_hours == &quot;TRUE&quot;) |&gt; 
+  group_by( year) |&gt; 
+  summarise(n()) #checking that we have enough observations</code></pre>
+<pre><code>## # A tibble: 10 × 2
+##     year `n()`
+##    &lt;dbl&gt; &lt;int&gt;
+##  1  2017    11
+##  2  2018    31
+##  3  2019    40
+##  4  2020    34
+##  5  2021    32
+##  6  2022    48
+##  7  2023    65
+##  8  2024   164
+##  9  2025    92
+## 10  2026    44</code></pre>
+<pre class="r"><code>dat5 |&gt; 
+  filter(is.na(time)) |&gt; 
+  count() </code></pre>
+<pre><code>## # A tibble: 1 × 1
+##       n
+##   &lt;int&gt;
+## 1     5</code></pre>
+<pre class="r"><code>dat5 |&gt; 
+  filter(time &lt; 6) |&gt; 
+  count() </code></pre>
+<pre><code>## # A tibble: 1 × 1
+##       n
+##   &lt;int&gt;
+## 1   733</code></pre>
+<pre class="r"><code>dat5 |&gt; 
+  filter(time &lt; 6 &amp; is.na(time)) |&gt; 
+  count() </code></pre>
+<pre><code>## # A tibble: 1 × 1
+##       n
+##   &lt;int&gt;
+## 1     0</code></pre>
+<pre class="r"><code>dat6 &lt;- dat5 |&gt; 
+  filter(!(time &lt; 6 &amp; !is.na(time)))</code></pre>
+<p>6 are missing time data. n = 797 are less than 6 hours in
+duration.</p>
+<p>After excluding, we are left with 599 observations.</p>
+<p>Let’s check and see how many observations we have:</p>
+<pre class="r"><code>glimpse(dat6)</code></pre>
+<pre><code>## Rows: 566
+## Columns: 20
+## $ inspection            &lt;dbl&gt; 1892548, 1892548, 1892548, 1875265, 1875265, 188…
+## $ sampling_number       &lt;chr&gt; &quot;494572-OIS&quot;, &quot;494575-OIS&quot;, &quot;494578-OIS&quot;, &quot;49223…
+## $ establishment         &lt;chr&gt; &quot;DELPHOS GRANITE WORKS INC&quot;, &quot;DELPHOS GRANITE WO…
+## $ date_sampled          &lt;date&gt; 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16,…
+## $ eighthr               &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;…
+## $ lab_number            &lt;chr&gt; &quot;65868&quot;, &quot;65871&quot;, &quot;65872&quot;, &quot;64207&quot;, &quot;64209&quot;, &quot;63…
+## $ field_number          &lt;chr&gt; &quot;00775F&quot;, &quot;00641F&quot;, &quot;00235F&quot;, &quot;04715D&quot;, &quot;01043H&quot;…
+## $ type                  &lt;fct&gt; Personal, Personal, Personal, Personal, Personal…
+## $ time                  &lt;dbl&gt; 7.983333, 7.233333, 7.150000, 6.500000, 6.500000…
+## $ air_volume            &lt;dbl&gt; 785.5600, 720.4400, 707.8500, 659.1000, 663.0000…
+## $ weight                &lt;dbl&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, …
+## $ imis                  &lt;dbl&gt; 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, …
+## $ substance             &lt;chr&gt; &quot;SILICA, RESPIRABLE CRYSTALLINE (NEW)&quot;, &quot;SILICA,…
+## $ result                &lt;chr&gt; &quot;&lt; 0.0127&quot;, &quot;&lt; 0.0139&quot;, &quot;&lt; 0.0141&quot;, &quot;0.25&quot;, &quot;0.2…
+## $ uom                   &lt;chr&gt; &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;…
+## $ qualifier             &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, …
+## $ year                  &lt;dbl&gt; 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, …
+## $ less_than_measurement &lt;lgl&gt; TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRU…
+## $ result_num            &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7…
+## $ silica_conc           &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7…</code></pre>
+<p>Let’s clean up our data too, only retaining the variables we
+need:</p>
+<pre class="r"><code>dat7 &lt;- dat6 |&gt; 
+  select(sampling_number, establishment, date_sampled, lab_number, field_number, time, imis, year, silica_conc)</code></pre>
 </div>
 </div>
 </div>
@@ -2518,35 +2717,13 @@ glimpse(quartz_dat)</code></pre>
 ## #   INSTRUMENT &lt;chr&gt;, LAB_NUMBER &lt;chr&gt;, FIELD_NUMBER &lt;chr&gt;, TYPE &lt;chr&gt;,
 ## #   BLANK &lt;chr&gt;, TIME &lt;dbl&gt;, AIR_VOLUME &lt;dbl&gt;, WEIGHT &lt;dbl&gt;, IMIS &lt;dbl&gt;,
 ## #   SUBSTANCE &lt;chr&gt;, RESULT &lt;dbl&gt;, UOM &lt;chr&gt;, QUALIFIER &lt;chr&gt;</code></pre>
-<div id="reformatting" class="section level2" number="2.1">
-<h2><span class="header-section-number">2.1</span> Reformatting</h2>
-<p>We can recylce most of the reformatting we used previously, just
-making certain that we retain the Lab No. Variable.</p>
-<pre class="r"><code>dust2 &lt;- dust_dat |&gt; 
-  rename_with(tolower) |&gt; 
-  mutate(
-    date_sampled = dmy(date_sampled), 
-    year = year(date_sampled), 
-         type = fct_recode(type,
-                          &quot;Personal&quot; = &quot;P&quot;,
-                          &quot;Area&quot; = &quot;A&quot;,
-                          &quot;Bulk&quot; = &quot;B&quot;, 
-                          &quot;Wipe&quot; = &quot;W&quot;),  
-    uom = fct_recode(uom,
-                          &quot;mg&quot; = &quot;MG&quot;, #milligrams
-                          &quot;mg&quot; = &quot;Y&quot;, #milligrams
-                          &quot;mcg&quot; = &quot;X&quot;, #micrograms
-                          &quot;mcg/m3&quot; = &quot;MCG/M3&quot;, #micrograms/m3
-                          &quot;mg/m3&quot; = &quot;MG_M3&quot;, #milligrams/m3
-                          &quot;mg/m3&quot; = &quot;M&quot;), #milligrams/m3
-    blank = as.logical(blank),
-    time = time/60,
-    less_than_measurement = grepl(&quot;^\\s*&lt;&quot;, result),
-    result_num = as.numeric(gsub(&quot;&lt;\\s*&quot;, &quot;&quot;, result))
-    ) |&gt; 
-  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
-
-
+<div id="reformatting-using-clean_osha-function" class="section level2" number="2.1">
+<h2><span class="header-section-number">2.1</span> Reformatting using
+Clean_OSHA Function</h2>
+<p>We can reuse our clean_osha function here to have consistent column
+naming and cleaning rules:</p>
+<pre class="r"><code>dust2 &lt;- clean_osha(dust_dat) 
+  
 dust2 |&gt; 
   group_by(uom) |&gt; 
   summarize(n()) </code></pre>
@@ -2561,36 +2738,23 @@ dust2 |&gt;
 ## 6 &lt;NA&gt;      5</code></pre>
 <pre class="r"><code>range(dust2$year)</code></pre>
 <pre><code>## [1] 2002 2026</code></pre>
-<pre class="r"><code>quartz2 &lt;- quartz_dat |&gt; 
-  rename_with(tolower) |&gt; 
-  mutate(
-    date_sampled = dmy(date_sampled), 
-    year = year(date_sampled), 
-         type = fct_recode(type,
-                          &quot;Personal&quot; = &quot;P&quot;,
-                          &quot;Area&quot; = &quot;A&quot;,
-                          &quot;Bulk&quot; = &quot;B&quot;, 
-                          &quot;Wipe&quot; = &quot;W&quot;),  
-    uom = fct_recode(uom,
-                          &quot;mg&quot; = &quot;MG&quot;, #milligrams
-                          &quot;mg&quot; = &quot;Y&quot;, #milligrams
-                          &quot;mcg&quot; = &quot;X&quot;, #micrograms
-                          &quot;mcg/m3&quot; = &quot;MCG/M3&quot;, #micrograms/m3
-                          &quot;mg/m3&quot; = &quot;MG_M3&quot;, #milligrams/m3
-                          &quot;mg/m3&quot; = &quot;M&quot;), #milligrams/m3
-    blank = as.logical(blank),
-    time = time/60,
-    less_than_measurement = grepl(&quot;^\\s*&lt;&quot;, result),
-    result_num = as.numeric(gsub(&quot;&lt;\\s*&quot;, &quot;&quot;, result))
-    ) |&gt; 
-  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
-
-
-quartz2 |&gt; 
+<pre class="r"><code>quartz2 &lt;-clean_osha(quartz_dat)</code></pre>
+</div>
+<div id="filter-quartz-for-percentage-measurements" class="section level2" number="2.2">
+<h2><span class="header-section-number">2.2</span> Filter Quartz for
+percentage measurements</h2>
+<p>We need to double check what the units of measurement and recorded
+numbers look like in this data.</p>
+<p>Fortunately, the variable for result is numeric, so we don’t need to
+worry about the “&lt;” measurements.</p>
+<pre class="r"><code>nrow(quartz2)</code></pre>
+<pre><code>## [1] 4672</code></pre>
+<pre class="r"><code>quartz2 |&gt; 
   group_by(uom) |&gt; 
-  summarize(n())</code></pre>
+  count() </code></pre>
 <pre><code>## # A tibble: 6 × 2
-##   uom   `n()`
+## # Groups:   uom [6]
+##   uom       n
 ##   &lt;fct&gt; &lt;int&gt;
 ## 1 %      4177
 ## 2 AAAAA    11
@@ -2598,183 +2762,513 @@ quartz2 |&gt;
 ## 4 mcg     326
 ## 5 mg       20
 ## 6 &lt;NA&gt;    136</code></pre>
+<p>“AAAAA” likely refers to the samples that had blanks or other
+problems.</p>
+<p>For our quartz data specifically, we want to retain only quartz
+fraction measurements expressed as percentages (%). Exclude measurements
+in other units (mcg, mg, invalid codes) as these are not quartz
+fractions.</p>
+<p>Inclusion Criteria: Unit of Measurement (uom) == “%”</p>
+<p>Exclusion Reasons:</p>
+<p>AAAAA: Blanks or quality control issues N: Non-numeric/invalid codes
+mcg, mg: Wrong units for quartz fraction NA: Missing units</p>
+<pre class="r"><code>nrow(quartz2) </code></pre>
+<pre><code>## [1] 4672</code></pre>
+<pre class="r"><code>quartz3 &lt;- quartz2 |&gt; 
+  filter(uom == &quot;%&quot;) 
+
+nrow(quartz3)</code></pre>
+<pre><code>## [1] 4177</code></pre>
+<p>We started with 4,672 observations, and excluded observations not
+pertaining to a % (AAAAA: n =11, N: n = 2, mcg: n = 326, mg: n = 20, NA:
+n = 136). We now have 4,177 observations.</p>
+<p>We can also make sure to convert our result over to a percentage
+right now:</p>
+<pre class="r"><code>quartz3 &lt;- quartz3 |&gt; 
+  mutate(quartz_pct = result_num/100)</code></pre>
 </div>
-<div id="merging-by-lab-no." class="section level2" number="2.2">
-<h2><span class="header-section-number">2.2</span> Merging by Lab
-No. </h2>
-<p>We only want to retain values that have the same Lab No., and values
-that correspond to the same date sampled.</p>
+<div id="filter-dust-for-respirable-concentration-in-mgm3" class="section level2" number="2.3">
+<h2><span class="header-section-number">2.3</span> Filter Dust for
+Respirable Concentration in mg/m3</h2>
+<p>We need to retain only respirable dust measurements expressed in
+mg/m³. Convert to mcg/m³ for consistency with other exposure
+metrics.</p>
+<p><strong>Exclusion Reasons:</strong></p>
+<p>AAAAA: Quality control samples mg: Absolute mass (not concentration)
+mcg: Wrong unit for this measurement NA: Missing unit information</p>
+<p>We know that the result for dust is similar to the respirable silica
+dataset that included “&lt;” measurements, so we will also need to
+create a numeric version of the results, making note of this in our
+results.</p>
+<pre class="r"><code>dust2 |&gt; 
+  group_by(uom) |&gt; 
+  count()</code></pre>
+<pre><code>## # A tibble: 6 × 2
+## # Groups:   uom [6]
+##   uom       n
+##   &lt;fct&gt; &lt;int&gt;
+## 1 %         1
+## 2 AAAAA     2
+## 3 mg/m3  3633
+## 4 mg      251
+## 5 mcg       1
+## 6 &lt;NA&gt;      5</code></pre>
+<p>We are going to retain the data coded as mg/m3 as the measured
+concentration. Accordingly, we will subset our data:</p>
+<pre class="r"><code>nrow(dust2) </code></pre>
+<pre><code>## [1] 3893</code></pre>
+<pre class="r"><code>dust3 &lt;- dust2 |&gt; 
+  filter(uom == &quot;mg/m3&quot;) 
+
+nrow(dust3)</code></pre>
+<pre><code>## [1] 3633</code></pre>
+<p>We started with 3,893 observations, and excluded units of measurement
+of AAAAA (n =2), mg (n = 251), mcg (n =1), and NAs (n = 5). We now have
+3,633 observations.</p>
+<p>###Convert to mcg/m3</p>
+<p>We are going to do our manual conversion to mcg from mg right now to
+keep things consistent:</p>
+<pre class="r"><code>dust3 &lt;- dust3 |&gt; 
+  mutate(dust_conc = result_num*1000,
+         dust_uom = &quot;mcg/m3&quot;) </code></pre>
+<p>##Establishment standard</p>
+<pre class="r"><code>dust3 &lt;- dust3 |&gt; mutate(establishment = standardize_establishment(establishment))
+quartz3 &lt;- quartz3 |&gt; mutate(establishment = standardize_establishment(establishment))</code></pre>
 </div>
-<div id="inclusionexclusion" class="section level2" number="2.3">
-<h2><span class="header-section-number">2.3</span>
-Inclusion/Exclusion</h2>
-<div id="personal-measurements-1" class="section level3" number="2.3.1">
-<h3><span class="header-section-number">2.3.1</span> Personal
-Measurements</h3>
-<p>To start, we have 2,135 observations. Next, we want to restrict our
-sample to only those pertaining to personal measurements.</p>
-<pre class="r"><code>dat |&gt; 
-  group_by(type) |&gt; 
-  summarize(n())</code></pre>
-<pre><code>## # A tibble: 3 × 2
-##   type     `n()`
-##   &lt;fct&gt;    &lt;int&gt;
-## 1 Area        20
-## 2 Personal  1839
-## 3 &lt;NA&gt;       276</code></pre>
-<p>We will retain 1,839 observations that used Personal measurements. We
-will drop those for Area measurements (n = 20), and missing data (n =
-276).</p>
-<pre class="r"><code>dat2 &lt;- dat |&gt; 
-  filter(type == &quot;Personal&quot;)</code></pre>
-</div>
-<div id="removing-blank-samples" class="section level3" number="2.3.2">
-<h3><span class="header-section-number">2.3.2</span> Removing blank
-samples</h3>
-<p>Next we will exclude all samples that were recorded as blank.</p>
-<pre class="r"><code>dat2 |&gt; 
+<div id="remove-blanks" class="section level2" number="2.4">
+<h2><span class="header-section-number">2.4</span> Remove Blanks</h2>
+<p>We need to ensure that we don’t have blank measurements in either the
+dust or quartz datasets:</p>
+<pre class="r"><code>dust3 |&gt; 
+  group_by(qualifier) |&gt; 
+  count()</code></pre>
+<pre><code>## # A tibble: 15 × 2
+## # Groups:   qualifier [15]
+##    qualifier              n
+##    &lt;chr&gt;              &lt;int&gt;
+##  1 &quot;\t\t\t\t&quot;            78
+##  2 &quot;\t\t\t\t\t&quot;          62
+##  3 &quot;&lt;=&quot;                   2
+##  4 &quot;=&lt;&quot;                   1
+##  5 &quot;@&quot;                    8
+##  6 &quot;BLK&quot;                295
+##  7 &quot;BLK\t\t\t\t&quot;          4
+##  8 &quot;BLK\t\t\t\t\t&quot;        5
+##  9 &quot;ND&quot;                 232
+## 10 &quot;ND\t\t\t\t&quot;           3
+## 11 &quot;ND\t\t\t\t\t&quot;         8
+## 12 &quot;ND-BLK&quot;             506
+## 13 &quot;ND-BLK\t\t\t\t&quot;      22
+## 14 &quot;ND-BLK\t\t\t\t\t&quot;    18
+## 15  &lt;NA&gt;               2389</code></pre>
+<pre class="r"><code>quartz3|&gt; 
   group_by(qualifier) |&gt; 
   count() </code></pre>
-<pre><code>## # A tibble: 10 × 2
-## # Groups:   qualifier [10]
-##    qualifier      n
-##    &lt;chr&gt;      &lt;int&gt;
-##  1 &quot;&lt;=&quot;           8
-##  2 &quot;&lt;=\t&quot;         1
-##  3 &quot;=&lt;&quot;           1
-##  4 &quot;@&quot;           13
-##  5 &quot;BLK&quot;          1
-##  6 &quot;ND&quot;         461
-##  7 &quot;ND\t&quot;        16
-##  8 &quot;ND-BLK&quot;     368
-##  9 &quot;ND-BLK\t&quot;     3
-## 10  &lt;NA&gt;        967</code></pre>
-<pre class="r"><code>dat3 &lt;- dat2 |&gt; 
-  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;)))</code></pre>
-<p>We gave removed blank samples (n =1) and samples that were recorded
-as both ND (LOQ) and Blank (n = 368), and those recorded as ND, Blank/t
-(n =3).</p>
-<p>We now have 1470 observations.</p>
-<p>###Removing samples that lack a recorded measurement</p>
-<p>We need our data to record a legitimate recorded measurement. First,
-we will check to see what the samples are recorded as when they are
-listed as being LOQ:</p>
-<pre class="r"><code>dat3 |&gt; 
-  summarise(sum(is.na(result_num)))</code></pre>
-<pre><code>## # A tibble: 1 × 1
-##   `sum(is.na(result_num))`
-##                      &lt;int&gt;
-## 1                       73</code></pre>
-<pre class="r"><code>dat3 |&gt; 
-  filter(is.na(result_num)) |&gt; 
-  group_by(qualifier) |&gt; 
-  summarise(n()) </code></pre>
+<pre><code>## # A tibble: 17 × 2
+## # Groups:   qualifier [17]
+##    qualifier            n
+##    &lt;chr&gt;            &lt;int&gt;
+##  1 &quot;\t\t\t&quot;            44
+##  2 &quot;\t\t\t\t&quot;          26
+##  3 &quot;&lt;&quot;                  3
+##  4 &quot;&lt;=&quot;               159
+##  5 &quot;&lt;=\t\t\t&quot;          10
+##  6 &quot;&lt;=\t\t\t\t&quot;         8
+##  7 &quot;=&lt;&quot;                49
+##  8 &quot;@&quot;                 13
+##  9 &quot;AAAAAA&quot;             1
+## 10 &quot;BLK&quot;               12
+## 11 &quot;ND&quot;              1227
+## 12 &quot;ND\t\t\t&quot;          23
+## 13 &quot;ND\t\t\t\t&quot;        39
+## 14 &quot;ND-BLK&quot;           675
+## 15 &quot;ND-BLK\t\t\t&quot;      27
+## 16 &quot;ND-BLK\t\t\t\t&quot;    21
+## 17  &lt;NA&gt;             1840</code></pre>
+<pre class="r"><code>dust4 &lt;- dust3 |&gt; 
+  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND-BLK\t\t\t&quot;, &quot;ND-BLK\t\t\t\t&quot;))) 
+
+quartz4 &lt;- quartz3 |&gt; 
+  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND-BLK\t\t\t&quot;, &quot;ND-BLK\t\t\t\t&quot;)))</code></pre>
+</div>
+<div id="no-duplicate-samples-1" class="section level2" number="2.5">
+<h2><span class="header-section-number">2.5</span> No duplicate
+samples</h2>
+<p>We only want to retain values that have the same Lab No., and values
+that correspond to the same date sampled. We are going to join these two
+datasets based on lab_number and date_sampled to be sure that the joins
+correspond to the same day/sample. First, we are going to rename our
+results from these two datasets into “dust_conc” and “quartz_pct”.</p>
+<pre class="r"><code>dust4 &lt;- dust4 |&gt; 
+  select(lab_number, date_sampled, field_number, sampling_number, 
+         establishment, type, eighthr, time, dust_conc, dust_uom)
+
+quartz4 &lt;- quartz4 |&gt; 
+  select(lab_number, date_sampled, field_number, sampling_number, establishment,
+          quartz_pct)</code></pre>
+<p>Checks before joining:</p>
+<p>Does either table have duplicate lab_number + date_sampled +
+establishment + field_number + result combos?</p>
+<p>Dust first:</p>
+<p>###Dust</p>
+<pre class="r"><code>#look at duplicates dust
+dust4_duplicates &lt;- dust4 |&gt;
+  group_by(lab_number, field_number, dust_conc, date_sampled) |&gt;
+  filter(n() &gt; 1) |&gt;
+  ungroup() 
+
+dust4_duplicates |&gt;  
+  arrange(lab_number, field_number, date_sampled, establishment, dust_conc) |&gt; 
+  select(lab_number, field_number, date_sampled, establishment, dust_conc) |&gt; 
+  head()</code></pre>
+<pre><code>## # A tibble: 6 × 5
+##   lab_number field_number date_sampled establishment                  dust_conc
+##   &lt;chr&gt;      &lt;chr&gt;        &lt;date&gt;       &lt;chr&gt;                              &lt;dbl&gt;
+## 1 F08985     00379D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       290
+## 2 F08985     00379D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       290
+## 3 F08986     00189D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       279
+## 4 F08986     00189D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       279
+## 5 F08987     03936D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       201
+## 6 F08987     03936D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       201</code></pre>
+<pre class="r"><code>#all variables 
+dust4_duplicates |&gt; 
+  arrange(lab_number, field_number, date_sampled, establishment, dust_conc) |&gt; 
+  head()</code></pre>
+<pre><code>## # A tibble: 6 × 10
+##   lab_number date_sampled field_number sampling_number establishment       type 
+##   &lt;chr&gt;      &lt;date&gt;       &lt;chr&gt;        &lt;chr&gt;           &lt;chr&gt;               &lt;fct&gt;
+## 1 F08985     2021-07-06   00379D       381509          SUDBURY GRANITE AN… Pers…
+## 2 F08985     2021-07-06   00379D       381509          SUDBURY GRANITE AN… Pers…
+## 3 F08986     2021-07-06   00189D       381511          SUDBURY GRANITE AN… Pers…
+## 4 F08986     2021-07-06   00189D       381511          SUDBURY GRANITE AN… Pers…
+## 5 F08987     2021-07-06   03936D       381508          SUDBURY GRANITE AN… Pers…
+## 6 F08987     2021-07-06   03936D       381508          SUDBURY GRANITE AN… Pers…
+## # ℹ 4 more variables: eighthr &lt;chr&gt;, time &lt;dbl&gt;, dust_conc &lt;dbl&gt;,
+## #   dust_uom &lt;chr&gt;</code></pre>
+<pre class="r"><code>dust4_dedup &lt;- dust4|&gt; 
+  distinct(lab_number, field_number, dust_conc, date_sampled, 
+           .keep_all = TRUE) 
+
+nrow(dust4_dedup) #how many rows are left after deleting duplicates?  </code></pre>
+<pre><code>## [1] 2545</code></pre>
+<p>###Quartz</p>
+<p>Next, quartz:</p>
+<pre class="r"><code>#look at duplicates quartz
+quartz4_duplicates &lt;- quartz4 |&gt;
+  group_by(lab_number, field_number, quartz_pct, date_sampled) |&gt;
+  filter(n() &gt; 1) |&gt;
+  ungroup() 
+
+quartz4_duplicates |&gt;  
+  arrange(lab_number, field_number, date_sampled, establishment, quartz_pct) |&gt; 
+  select(lab_number, field_number, date_sampled, establishment, quartz_pct) |&gt; 
+  head()</code></pre>
+<pre><code>## # A tibble: 6 × 5
+##   lab_number field_number date_sampled establishment               quartz_pct
+##   &lt;chr&gt;      &lt;chr&gt;        &lt;date&gt;       &lt;chr&gt;                            &lt;dbl&gt;
+## 1 L99057     04296E       2017-01-20   ENVIRONMENTAL MATERIALS LLC       0   
+## 2 L99057     04296E       2017-01-20   ENVIRONMENTAL MATERIALS LLC       0   
+## 3 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC          0.21
+## 4 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC          0.21
+## 5 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC             0.19
+## 6 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC             0.19</code></pre>
+<pre class="r"><code>#all variables 
+quartz4_duplicates |&gt;   
+  arrange(lab_number, field_number, date_sampled, establishment, quartz_pct) |&gt; 
+  head()</code></pre>
+<pre><code>## # A tibble: 6 × 6
+##   lab_number date_sampled field_number sampling_number establishment  quartz_pct
+##   &lt;chr&gt;      &lt;date&gt;       &lt;chr&gt;        &lt;chr&gt;           &lt;chr&gt;               &lt;dbl&gt;
+## 1 L99057     2017-01-20   04296E       260127          ENVIRONMENTAL…       0   
+## 2 L99057     2017-01-20   04296E       260127          ENVIRONMENTAL…       0   
+## 3 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
+## 4 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
+## 5 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
+## 6 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19</code></pre>
+<pre class="r"><code>quartz4_dedup &lt;- quartz4|&gt; 
+  distinct(lab_number, field_number, quartz_pct, date_sampled, 
+           .keep_all = TRUE) 
+
+nrow(quartz4_dedup) #how many rows are left after deleting duplicates? </code></pre>
+<pre><code>## [1] 3351</code></pre>
+<p><strong>NOTE</strong>: when we performed this, we lost some
+information about different spellings of the establishments. This will
+likely come up again as being problematic when we merge with the other
+respirable silica dataset. Something to be aware of in the future.</p>
+</div>
+<div id="removing-unnecessary-columns" class="section level2" number="2.6">
+<h2><span class="header-section-number">2.6</span> Removing unnecessary
+columns</h2>
+<p>We are only going to retain the join keys and quartz pct before
+merging with dust:</p>
+<pre class="r"><code># Remove unnecessary columns
+quartz_merge &lt;- quartz4_dedup |&gt; 
+  select(lab_number, field_number, quartz_pct)
+
+#removing the hyphen part after number
+dust_merge &lt;- dust4_dedup |&gt; 
+  mutate(sampling_number = word(sampling_number, 1, sep = &quot;-&quot;))  
+
+glimpse(dust_merge) </code></pre>
+<pre><code>## Rows: 2,545
+## Columns: 10
+## $ lab_number      &lt;chr&gt; &quot;65868&quot;, &quot;65871&quot;, &quot;65872&quot;, &quot;64207&quot;, &quot;64209&quot;, &quot;63663&quot;, …
+## $ date_sampled    &lt;date&gt; 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16, 2026-…
+## $ field_number    &lt;chr&gt; &quot;00775F&quot;, &quot;00641F&quot;, &quot;00235F&quot;, &quot;04715D&quot;, &quot;01043H&quot;, &quot;097…
+## $ sampling_number &lt;chr&gt; &quot;494572&quot;, &quot;494575&quot;, &quot;494578&quot;, &quot;492231&quot;, &quot;492232&quot;, &quot;492…
+## $ establishment   &lt;chr&gt; &quot;DELPHOS GRANITE WORKS INC&quot;, &quot;DELPHOS GRANITE WORKS IN…
+## $ type            &lt;fct&gt; Personal, Personal, Personal, Personal, Personal, Pers…
+## $ eighthr         &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;,…
+## $ time            &lt;dbl&gt; 7.983333, 7.233333, 7.150000, 6.500000, 6.500000, 7.40…
+## $ dust_conc       &lt;dbl&gt; 109, 124, 278, 1090, 514, 126, 107, 203, 111, 1060, 91…
+## $ dust_uom        &lt;chr&gt; &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg…</code></pre>
+<pre class="r"><code>glimpse(quartz_merge) </code></pre>
+<pre><code>## Rows: 3,351
+## Columns: 3
+## $ lab_number   &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22509&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22392…
+## $ field_number &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03542E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;02839D…
+## $ quartz_pct   &lt;dbl&gt; 0.32, 0.29, 0.00, 0.36, 0.38, 0.00, 0.22, 0.00, 0.23, 0.2…</code></pre>
+<pre class="r"><code>merged_dust_quartz &lt;- quartz_merge|&gt; 
+  inner_join(dust_merge, by = c(&quot;lab_number&quot;, &quot;field_number&quot;),
+             relationship = &quot;one-to-one&quot;)  
+
+#checking how many didn&#39;t match: 
+quartz_merge|&gt; 
+  anti_join(dust_merge, by = c(&quot;lab_number&quot;, &quot;field_number&quot;)) |&gt; 
+  nrow()</code></pre>
+<pre><code>## [1] 2140</code></pre>
+<pre class="r"><code>nrow(merged_dust_quartz) </code></pre>
+<pre><code>## [1] 1211</code></pre>
+<pre class="r"><code>glimpse(merged_dust_quartz)</code></pre>
+<pre><code>## Rows: 1,211
+## Columns: 11
+## $ lab_number      &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22509&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22…
+## $ field_number    &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03542E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;028…
+## $ quartz_pct      &lt;dbl&gt; 0.32, 0.29, 0.00, 0.36, 0.38, 0.00, 0.22, 0.00, 0.23, …
+## $ date_sampled    &lt;date&gt; 2018-09-26, 2018-09-26, 2018-09-26, 2018-09-26, 2018-…
+## $ sampling_number &lt;chr&gt; &quot;325911&quot;, &quot;325913&quot;, &quot;325915&quot;, &quot;325916&quot;, &quot;325909&quot;, &quot;325…
+## $ establishment   &lt;chr&gt; &quot;TELLURIDE STONE COMPANY&quot;, &quot;TELLURIDE STONE COMPANY&quot;, …
+## $ type            &lt;fct&gt; Personal, Personal, Personal, Personal, Personal, Pers…
+## $ eighthr         &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;,…
+## $ time            &lt;dbl&gt; 7.100000, 6.500000, 6.916667, 7.033333, 6.833333, 2.28…
+## $ dust_conc       &lt;dbl&gt; 395, 321, 125, 129, 599, 193, 4233, 110, 4237, 1120, 9…
+## $ dust_uom        &lt;chr&gt; &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg…</code></pre>
+<p>Ok, looks like we have 1211 observations.</p>
+<p>Let’s perform our calculation to get the official silica
+concentration, and add a variable for the year:</p>
+<pre class="r"><code>merged_dust_quartz2 &lt;- merged_dust_quartz |&gt; 
+  mutate(silica_conc = dust_conc*quartz_pct,
+         year = year(date_sampled)) 
+
+merged_dust_quartz2 |&gt; 
+  summarize(mean = mean(silica_conc),sd = sd(silica_conc)) </code></pre>
 <pre><code>## # A tibble: 1 × 2
-##   qualifier `n()`
-##   &lt;chr&gt;     &lt;int&gt;
-## 1 &lt;NA&gt;         73</code></pre>
-<p>There are 73 observations that are missing data for the recorded
-measurement. As such we will have to delete these observations.</p>
-<pre class="r"><code>dat4 &lt;- dat3 |&gt; 
-  filter(!is.na(result_num))</code></pre>
-<p>After removal, we now have 1,397 observations.</p>
-</div>
-<div id="removing-samples-lacking-air-volume-data" class="section level3" number="2.3.3">
-<h3><span class="header-section-number">2.3.3</span> Removing samples
-lacking air volume data</h3>
-<p>We are only going to retain samples that contain clear units
-standardized to air volume. We cannot convert our observations to a
-concentration that are standalones, since they lack air volume data.</p>
-<p>To our best knowledge, the records cannot be personal air samples,
-and were likely bulk samples that were miscoded as personal samples.</p>
-<pre class="r"><code>dat4 |&gt; 
-  group_by(uom) |&gt; 
-  summarise(n())</code></pre>
+##    mean    sd
+##   &lt;dbl&gt; &lt;dbl&gt;
+## 1  138.  498.</code></pre>
+<pre class="r"><code>#by year: 
+merged_dust_quartz2 |&gt; 
+  group_by(year) |&gt; 
+  summarize(mean = mean(silica_conc),sd = sd(silica_conc)) </code></pre>
+<pre><code>## # A tibble: 14 × 3
+##     year  mean     sd
+##    &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt;
+##  1  2004   0      0  
+##  2  2006  67.2  150. 
+##  3  2007 713.  1521. 
+##  4  2008  20.6   29.8
+##  5  2009  62.1  175. 
+##  6  2010 307.   809. 
+##  7  2011  89.1  235. 
+##  8  2012 148.   474. 
+##  9  2013 202.   803. 
+## 10  2014  82.3  187. 
+## 11  2015  85.2  174. 
+## 12  2016 145.   588. 
+## 13  2017  76.2  141. 
+## 14  2018 169.   364.</code></pre>
+<p>##Personal Measures</p>
+<p>We need to ensure that we are only retaining measurements that are
+personal:</p>
+<pre class="r"><code>merged_dust_quartz2 |&gt; 
+  group_by(type) |&gt; 
+  count() </code></pre>
 <pre><code>## # A tibble: 2 × 2
-##   uom    `n()`
-##   &lt;chr&gt;  &lt;int&gt;
-## 1 mcg        1
-## 2 mcg/m3  1396</code></pre>
-<p>At this time, there is only one value that is not standardized to air
-volume; we will now exclude it (n =1):</p>
-<pre class="r"><code>dat5 &lt;- dat4 |&gt; 
-  filter(uom == &quot;mcg/m3&quot;)</code></pre>
-<p>We now have 1,396 observations.</p>
+## # Groups:   type [2]
+##   type         n
+##   &lt;fct&gt;    &lt;int&gt;
+## 1 Area         6
+## 2 Personal  1205</code></pre>
+<pre class="r"><code>merged_dust_quartz3 &lt;- merged_dust_quartz2|&gt; 
+  filter(type == &quot;Personal&quot;)</code></pre>
 </div>
-<div id="removing-observations-that-are-below-6-hours-in-time" class="section level3" number="2.3.4">
-<h3><span class="header-section-number">2.3.4</span> Removing
-observations that are below 6 hours in time</h3>
-<pre class="r"><code>dat5 |&gt; 
+<div id="hrs-1" class="section level2" number="2.7">
+<h2><span class="header-section-number">2.7</span> &gt;= 6 hrs</h2>
+<pre class="r"><code>merged_dust_quartz3 |&gt; 
   mutate(six_hours = time &gt;= 6) |&gt;
   filter(six_hours == &quot;TRUE&quot;) |&gt; 
   group_by( year) |&gt; 
   summarise(n()) #checking that we have enough observations</code></pre>
-<pre><code>## # A tibble: 10 × 2
+<pre><code>## # A tibble: 13 × 2
 ##     year `n()`
 ##    &lt;dbl&gt; &lt;int&gt;
-##  1  2017    11
-##  2  2018    31
-##  3  2019    40
-##  4  2020    34
-##  5  2021    32
-##  6  2022    48
-##  7  2023    97
-##  8  2024   164
-##  9  2025    92
-## 10  2026    44</code></pre>
-<pre class="r"><code>dat5 |&gt; 
+##  1  2004     2
+##  2  2006     2
+##  3  2007     6
+##  4  2009     3
+##  5  2010    26
+##  6  2011    84
+##  7  2012    75
+##  8  2013    68
+##  9  2014    54
+## 10  2015    21
+## 11  2016    57
+## 12  2017    49
+## 13  2018    29</code></pre>
+<pre class="r"><code>merged_dust_quartz3|&gt; 
   filter(is.na(time)) |&gt; 
   count() </code></pre>
 <pre><code>## # A tibble: 1 × 1
 ##       n
 ##   &lt;int&gt;
-## 1     6</code></pre>
-<pre class="r"><code>dat5 |&gt; 
+## 1     3</code></pre>
+<pre class="r"><code>merged_dust_quartz3|&gt; 
   filter(time &lt; 6) |&gt; 
   count() </code></pre>
 <pre><code>## # A tibble: 1 × 1
 ##       n
 ##   &lt;int&gt;
-## 1   797</code></pre>
-<pre class="r"><code>dat5 |&gt; 
+## 1   726</code></pre>
+<pre class="r"><code>merged_dust_quartz3 |&gt; 
   filter(time &lt; 6 &amp; is.na(time)) |&gt; 
   count() </code></pre>
 <pre><code>## # A tibble: 1 × 1
 ##       n
 ##   &lt;int&gt;
 ## 1     0</code></pre>
-<pre class="r"><code>dat6 &lt;- dat5 |&gt; 
+<pre class="r"><code>merged_dust_quartz4 &lt;- merged_dust_quartz3|&gt; 
   filter(!(time &lt; 6 &amp; !is.na(time)))</code></pre>
-<p>6 are missing time data. n = 797 are less than 6 hours in
-duration.</p>
-<p>After excluding, we are left with 599 observations.</p>
-<p>Let’s check and see how many observations we have:</p>
-<pre class="r"><code>glimpse(dat6)</code></pre>
-<pre><code>## Rows: 599
-## Columns: 18
-## $ inspection            &lt;dbl&gt; 1892548, 1892548, 1892548, 1875265, 1875265, 188…
-## $ sampling_number       &lt;chr&gt; &quot;494572-OIS&quot;, &quot;494575-OIS&quot;, &quot;494578-OIS&quot;, &quot;49223…
-## $ establishment         &lt;chr&gt; &quot;DELPHOS GRANITE WORKS INC&quot;, &quot;DELPHOS GRANITE WO…
-## $ date_sampled          &lt;date&gt; 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16,…
-## $ eighthr               &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;…
-## $ field_number          &lt;chr&gt; &quot;00775F&quot;, &quot;00641F&quot;, &quot;00235F&quot;, &quot;04715D&quot;, &quot;01043H&quot;…
-## $ type                  &lt;fct&gt; Personal, Personal, Personal, Personal, Personal…
-## $ time                  &lt;dbl&gt; 7.983333, 7.233333, 7.150000, 6.500000, 6.500000…
-## $ air_volume            &lt;dbl&gt; 785.5600, 720.4400, 707.8500, 659.1000, 663.0000…
-## $ weight                &lt;dbl&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, …
-## $ imis                  &lt;dbl&gt; 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, …
-## $ substance             &lt;chr&gt; &quot;SILICA, RESPIRABLE CRYSTALLINE (NEW)&quot;, &quot;SILICA,…
-## $ result                &lt;chr&gt; &quot;&lt; 0.0127&quot;, &quot;&lt; 0.0139&quot;, &quot;&lt; 0.0141&quot;, &quot;0.25&quot;, &quot;0.2…
-## $ uom                   &lt;chr&gt; &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;…
-## $ qualifier             &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, …
-## $ year                  &lt;dbl&gt; 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, …
-## $ less_than_measurement &lt;lgl&gt; TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRU…
-## $ result_num            &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7…</code></pre>
-<p>#OEL data addition</p>
+</div>
+</div>
+<div id="merge-respirable-and-calculated-data" class="section level1" number="3">
+<h1><span class="header-section-number">3</span> Merge Respirable and
+Calculated data</h1>
+<p>Lastly, we need to merge our quartz and dust datasets with the
+respirable dataset. Before we do this, we need to make sure we include
+only the relevant variables, as well as make a consistent respirable
+concentration variable that only has results in mcg/m3.</p>
+<p>Variables to add from merged_dust_quarts: imis (val = 9010_9130) To
+drop: quartz_pct, dust_conc, dust_uom.</p>
+<pre class="r"><code>merged_dust_quartz5 &lt;- merged_dust_quartz4 |&gt; 
+  select(-quartz_pct, -dust_conc, -dust_uom) |&gt; 
+  mutate(imis = &quot;9010_9130&quot;) 
+
+dat7 &lt;- dat7 |&gt; 
+  mutate(imis = as.character(imis))</code></pre>
+<pre class="r"><code>combined_dat &lt;- bind_rows(dat7, merged_dust_quartz5)
+nrow(combined_dat) </code></pre>
+<pre><code>## [1] 1045</code></pre>
+<pre class="r"><code>glimpse(combined_dat)</code></pre>
+<pre><code>## Rows: 1,045
+## Columns: 11
+## $ sampling_number &lt;chr&gt; &quot;494572-OIS&quot;, &quot;494575-OIS&quot;, &quot;494578-OIS&quot;, &quot;492231-OIS&quot;…
+## $ establishment   &lt;chr&gt; &quot;DELPHOS GRANITE WORKS INC&quot;, &quot;DELPHOS GRANITE WORKS IN…
+## $ date_sampled    &lt;date&gt; 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16, 2026-…
+## $ lab_number      &lt;chr&gt; &quot;65868&quot;, &quot;65871&quot;, &quot;65872&quot;, &quot;64207&quot;, &quot;64209&quot;, &quot;63660&quot;, …
+## $ field_number    &lt;chr&gt; &quot;00775F&quot;, &quot;00641F&quot;, &quot;00235F&quot;, &quot;04715D&quot;, &quot;01043H&quot;, &quot;093…
+## $ time            &lt;dbl&gt; 7.983333, 7.233333, 7.150000, 6.500000, 6.500000, 7.53…
+## $ imis            &lt;chr&gt; &quot;9000&quot;, &quot;9000&quot;, &quot;9000&quot;, &quot;9000&quot;, &quot;9000&quot;, &quot;9000&quot;, &quot;9000&quot;…
+## $ year            &lt;dbl&gt; 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, …
+## $ silica_conc     &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9…
+## $ type            &lt;fct&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…
+## $ eighthr         &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…</code></pre>
+<p>#Data check</p>
+<p>We want to see how many observations we have per year, as well as
+check for potential outliers:</p>
+<pre class="r"><code>summary(combined_dat$silica_conc)</code></pre>
+<pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+##     0.0     0.0    19.9   106.0    63.3  5093.0</code></pre>
+<pre class="r"><code>Q1 &lt;- quantile(combined_dat$silica_conc, 0.25, na.rm = TRUE)
+Q3 &lt;- quantile(combined_dat$silica_conc, 0.75, na.rm = TRUE)
+IQR_value &lt;- IQR(combined_dat$silica_conc, na.rm = TRUE)
+
+lower_bound &lt;- Q1 - 1.5 * IQR_value
+upper_bound &lt;- Q3 + 1.5 * IQR_value
+
+lower_bound</code></pre>
+<pre><code>##    25% 
+## -94.95</code></pre>
+<pre class="r"><code>upper_bound </code></pre>
+<pre><code>##    75% 
+## 158.25</code></pre>
+<pre class="r"><code>outliers &lt;- combined_dat |&gt; 
+  filter(silica_conc &lt; lower_bound | silica_conc &gt; upper_bound)
+
+outliers </code></pre>
+<pre><code>## # A tibble: 139 × 11
+##    sampling_number establishment      date_sampled lab_number field_number  time
+##    &lt;chr&gt;           &lt;chr&gt;              &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+##  1 492231-OIS      CELTIC STONE GRAN… 2026-04-16   64207      04715D        6.5 
+##  2 492232-OIS      CELTIC STONE GRAN… 2026-04-16   64209      01043H        6.5 
+##  3 491870-OIS      REVIVAL STONE AND… 2026-04-09   63184      06873H        7.37
+##  4 485532-OIS      JONES STONE AND M… 2026-01-07   57566      00956D        6.22
+##  5 475827-OIS      ATLANTIS GRANITE … 2025-07-02   51105      R3-GS-60      7.72
+##  6 474739-OIS      GMQ TOPS MOBILE L… 2025-06-18   50716      07021H        7.02
+##  7 474742-OIS      GMQ TOPS MOBILE L… 2025-06-18   50718      07492H        7.23
+##  8 473486-OIS      THE GRANITE GUY L… 2025-05-16   49425      A001S         7.83
+##  9 472408-OIS      GLOBAL GRANITE LLC 2025-04-28   48511      07523H        6.5 
+## 10 472360-OIS      GLOBAL GRANITE LLC 2025-04-28   48498      07174H        6.48
+## # ℹ 129 more rows
+## # ℹ 5 more variables: imis &lt;chr&gt;, year &lt;dbl&gt;, silica_conc &lt;dbl&gt;, type &lt;fct&gt;,
+## #   eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  slice_max(silica_conc, n = 5)</code></pre>
+<pre><code>## # A tibble: 5 × 11
+##   sampling_number establishment date_sampled lab_number field_number  time imis 
+##   &lt;chr&gt;           &lt;chr&gt;         &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt; &lt;chr&gt;
+## 1 432984          CL GRANITE A… 2023-10-27   F30229     03905D        8.05 9000 
+## 2 363266          SAULOS GRANI… 2020-01-22   F01496     01152D        6.15 9000 
+## 3 416546          SAUL ESCOBAR  2023-03-07   F22819     08666D        7.87 9000 
+## 4 441079          ROCK FIN COU… 2024-02-28   F43997     01446E        6.97 9000 
+## 5 416547          SAUL ESCOBAR  2023-03-07   F22818     08675D        7.98 9000 
+## # ℹ 4 more variables: year &lt;dbl&gt;, silica_conc &lt;dbl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<p>For our outliers, we want to be certain that none of these started as
+a different unit of measurement. We will compare with our original
+database:</p>
+<pre class="r"><code>outlier_field_no &lt;- combined_dat |&gt; 
+  slice_max(silica_conc, n = 5) |&gt; 
+  pull(field_number)  
+
+outlier_field_no </code></pre>
+<pre><code>## [1] &quot;03905D&quot; &quot;01152D&quot; &quot;08666D&quot; &quot;01446E&quot; &quot;08675D&quot;</code></pre>
+<pre class="r"><code>dat |&gt; 
+  filter(field_number %in% outlier_field_no) |&gt; 
+  select(uom, result_num, eighthr) </code></pre>
+<pre><code>## # A tibble: 8 × 3
+##   uom    result_num eighthr
+##   &lt;fct&gt;       &lt;dbl&gt; &lt;chr&gt;  
+## 1 mcg/m3       4030 Y      
+## 2 mcg/m3       5093 Y      
+## 3 mcg/m3       5093 Y      
+## 4 mcg/m3       4066 Y      
+## 5 mcg/m3       3639 Y      
+## 6 mcg/m3       3639 Y      
+## 7 mcg/m3       4066 Y      
+## 8 mcg/m3       4090 N</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  group_by(eighthr) |&gt; 
+  count()</code></pre>
+<pre><code>## # A tibble: 3 × 2
+## # Groups:   eighthr [3]
+##   eighthr     n
+##   &lt;chr&gt;   &lt;int&gt;
+## 1 N         411
+## 2 Y          68
+## 3 &lt;NA&gt;      566</code></pre>
+<p>Ok, all of these started off as mcg/m3 interestingly. We cannot chalk
+it up to being incorrect measurement classification.</p>
 <p>Let’s save our analytic dataset:</p>
-<pre class="r"><code>write_csv(dat6, &quot;../CleanData/study_dat.csv&quot;)</code></pre>
-</div>
-</div>
+<pre class="r"><code>write_csv(combined_dat, &quot;../CleanData/study_dat.csv&quot;)</code></pre>
 </div>
 
 

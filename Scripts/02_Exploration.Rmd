@@ -48,7 +48,12 @@ range(study_dat$date_sampled)
 
 We have data spanning Feb of 2004 to May of 2026. 
 
+How do eighthr ones look in terms of time? 
 
+```{r}
+study_dat |> 
+  filter(eighthr = )
+```
 
 ## Observations by Year 
 
