@@ -398,7 +398,7 @@ summary(mod_linear_reg)
  
 That gave us the trend when year is a character variable. Since we are missing 2005, we may need to initalize our data at year 2005. Then we can create a year counter for the year in the study, and estimate a numeric result: 
 
-### Year Counter
+### Year Counter Creaqtion
 
 ```{r}
 dat_clean <- study_dat |>  
@@ -411,7 +411,7 @@ dat_clean |>
   arrange(year)
 ``` 
 
-Doing so has reduced our sample size down to 1,043.  
+## Linear Model
 
 Let's try our glm again: 
 ```{r}
@@ -423,6 +423,8 @@ extract_eq(mod_linear_reg)
 Very interesting, this time we see a small reduction in concentration over the years, but this is VERY insignificant. 
 
 Let's proceed investigating this, adding in our random effect for establishment to establish whether there is within-group variation: 
+
+## Clustering on Establishment
 
 ```{r} 
 
@@ -436,7 +438,18 @@ coeftest(mod_linear_reg,
 
 ``` 
 
-Not much has changed at all!   
+Not much has changed at all!    
+
+## Random Effect Establishment 
+
+What if we add the random effect into the equation? 
+
+```{r}
+library(lme4)
+mod_linear_reg2 <- glmer(silica_conc ~ year_counter + (1 | establishment), data = dat_clean)
+summary(mod_linear_reg2) 
+extract_eq(mod_linear_reg2)
+```
 
 
 
@@ -488,7 +501,17 @@ tidy_result |>
 
 ``` 
 
-It looks like we see a slight decrease in the odds of the measurements being above PEL annually, controlling for the variation of each individual establishment.  
+It looks like we see a slight decrease in the odds of the measurements being above PEL annually, controlling for the variation of each individual establishment.   
+
+## Random effect: 
+
+```{r} 
+mod_logistic_random  <- glmer(over_PEL~year_counter + (1 | establishment), data = dat_clean, 
+                     family = binomial)
+
+summary(mod_logistic_random) 
+extract_eq(mod_logistic_random)
+```
 
 ### Over Action Level 
 
