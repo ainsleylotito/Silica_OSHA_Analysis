@@ -497,7 +497,9 @@ tidy_result <- tibble(
   select(term, estimate, conf.low, conf.high, std.error, statistic, p.value)
 
 tidy_result |> 
-  mutate(across(where(is.numeric), ~round(., 3)))
+  mutate(across(where(is.numeric), ~round(., 3))) 
+
+tidy_result
 
 ``` 
 

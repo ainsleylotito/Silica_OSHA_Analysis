@@ -2029,8 +2029,9 @@ summary(mod_linear_reg)</code></pre>
 are missing 2005, we may need to initalize our data at year 2005. Then
 we can create a year counter for the year in the study, and estimate a
 numeric result:</p>
-<div id="year-counter" class="section level3" number="5.0.1">
-<h3><span class="header-section-number">5.0.1</span> Year Counter</h3>
+<div id="year-counter-creaqtion" class="section level3" number="5.0.1">
+<h3><span class="header-section-number">5.0.1</span> Year Counter
+Creaqtion</h3>
 <pre class="r"><code>dat_clean &lt;- study_dat |&gt;  
   mutate(year = as.numeric(as.character(year))) |&gt;  
   arrange(year) |&gt;
@@ -2061,7 +2062,9 @@ dat_clean |&gt;
 ## 19 2024           18
 ## 20 2025           19
 ## 21 2026           20</code></pre>
-<p>Doing so has reduced our sample size down to 1,043.</p>
+</div>
+<div id="linear-model" class="section level2" number="5.1">
+<h2><span class="header-section-number">5.1</span> Linear Model</h2>
 <p>Let’s try our glm again:</p>
 <pre class="r"><code>mod_linear_reg &lt;- glm(silica_conc ~ year_counter, data = dat_clean)
 summary(mod_linear_reg) </code></pre>
@@ -2092,6 +2095,10 @@ E( \operatorname{silica_conc} ) = \alpha +
 over the years, but this is VERY insignificant.</p>
 <p>Let’s proceed investigating this, adding in our random effect for
 establishment to establish whether there is within-group variation:</p>
+</div>
+<div id="clustering-on-establishment" class="section level2" number="5.2">
+<h2><span class="header-section-number">5.2</span> Clustering on
+Establishment</h2>
 <pre class="r"><code>coeftest(mod_linear_reg, 
          vcov = vcovCL(mod_linear_reg, 
                        cluster = ~ establishment,
@@ -2106,8 +2113,49 @@ establishment to establish whether there is within-group variation:</p>
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
 <p>Not much has changed at all!</p>
 </div>
-<div id="over-pel" class="section level3" number="5.0.2">
-<h3><span class="header-section-number">5.0.2</span> Over PEL</h3>
+<div id="random-effect-establishment" class="section level2" number="5.3">
+<h2><span class="header-section-number">5.3</span> Random Effect
+Establishment</h2>
+<p>What if we add the random effect into the equation?</p>
+<pre class="r"><code>library(lme4)
+mod_linear_reg2 &lt;- glmer(silica_conc ~ year_counter + (1 | establishment), data = dat_clean)
+summary(mod_linear_reg2) </code></pre>
+<pre><code>## Linear mixed model fit by REML [&#39;lmerMod&#39;]
+## Formula: silica_conc ~ year_counter + (1 | establishment)
+##    Data: dat_clean
+## 
+## REML criterion at convergence: 15178.1
+## 
+## Scaled residuals: 
+##     Min      1Q  Median      3Q     Max 
+## -5.1330 -0.1666 -0.1118 -0.0374 13.7224 
+## 
+## Random effects:
+##  Groups        Name        Variance Std.Dev.
+##  establishment (Intercept) 46346    215.3   
+##  Residual                  90843    301.4   
+## Number of obs: 1045, groups:  establishment, 340
+## 
+## Fixed effects:
+##              Estimate Std. Error t value
+## (Intercept)  112.5889    38.2974   2.940
+## year_counter  -0.6199     2.8078  -0.221
+## 
+## Correlation of Fixed Effects:
+##             (Intr)
+## year_countr -0.912</code></pre>
+<pre class="r"><code>extract_eq(mod_linear_reg2)</code></pre>
+<p><span class="math display">\[
+\begin{aligned}
+  \operatorname{silica\_conc}_{i}  &amp;\sim N \left(\alpha_{j[i]} +
+\beta_{1}(\operatorname{year\_counter}), \sigma^2 \right) \\
+    \alpha_{j}  &amp;\sim N \left(\mu_{\alpha_{j}},
+\sigma^2_{\alpha_{j}} \right)
+    \text{, for establishment j = 1,} \dots \text{,J}
+\end{aligned}
+\]</span></p>
+<div id="over-pel" class="section level3" number="5.3.1">
+<h3><span class="header-section-number">5.3.1</span> Over PEL</h3>
 <p>What if we instead investigate a logistic model that investigates
 whether the number of facilities exceeding the PEL has changed over the
 years?</p>
@@ -2193,8 +2241,55 @@ tidy_result |&gt;
 measurements being above PEL annually, controlling for the variation of
 each individual establishment.</p>
 </div>
-<div id="over-action-level" class="section level3" number="5.0.3">
-<h3><span class="header-section-number">5.0.3</span> Over Action
+</div>
+<div id="random-effect" class="section level2" number="5.4">
+<h2><span class="header-section-number">5.4</span> Random effect:</h2>
+<pre class="r"><code>mod_logistic_random  &lt;- glmer(over_PEL~year_counter + (1 | establishment), data = dat_clean, 
+                     family = binomial)
+
+summary(mod_logistic_random) </code></pre>
+<pre><code>## Generalized linear mixed model fit by maximum likelihood (Laplace
+##   Approximation) [glmerMod]
+##  Family: binomial  ( logit )
+## Formula: over_PEL ~ year_counter + (1 | establishment)
+##    Data: dat_clean
+## 
+##       AIC       BIC    logLik -2*log(L)  df.resid 
+##    1104.3    1119.2    -549.2    1098.3      1042 
+## 
+## Scaled residuals: 
+##     Min      1Q  Median      3Q     Max 
+## -1.7881 -0.3478 -0.2499  0.4793  3.2066 
+## 
+## Random effects:
+##  Groups        Name        Variance Std.Dev.
+##  establishment (Intercept) 4.678    2.163   
+## Number of obs: 1045, groups:  establishment, 340
+## 
+## Fixed effects:
+##              Estimate Std. Error z value Pr(&gt;|z|)   
+## (Intercept)  -1.08693    0.39547  -2.748  0.00599 **
+## year_counter -0.05206    0.02911  -1.788  0.07373 . 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Correlation of Fixed Effects:
+##             (Intr)
+## year_countr -0.840</code></pre>
+<pre class="r"><code>extract_eq(mod_logistic_random)</code></pre>
+<p><span class="math display">\[
+\begin{aligned}
+  \operatorname{over\_PEL}_{i}  &amp;\sim \operatorname{Binomial}(n = 1,
+\operatorname{prob}_{\operatorname{over\_PEL} = 1} = \widehat{P}) \\
+    \log\left[\frac{\hat{P}}{1 - \hat{P}} \right] &amp;=\alpha_{j[i]} +
+\beta_{1}(\operatorname{year\_counter}) \\
+    \alpha_{j}  &amp;\sim N \left(\mu_{\alpha_{j}},
+\sigma^2_{\alpha_{j}} \right)
+    \text{, for establishment j = 1,} \dots \text{,J}
+\end{aligned}
+\]</span></p>
+<div id="over-action-level" class="section level3" number="5.4.1">
+<h3><span class="header-section-number">5.4.1</span> Over Action
 Level</h3>
 <p>What about the odds of annual measurements exceeding the action
 level?</p>
@@ -2260,6 +2355,7 @@ tidy_result2 |&gt;
 ## 2 year_counter    0.987    0.954      1.02     0.017    -0.754   0.451</code></pre>
 <p>There is no significant change in measurements exceeding the action
 level by year.</p>
+</div>
 </div>
 </div>
 <div id="high-concentration-examinations" class="section level1" number="6">
