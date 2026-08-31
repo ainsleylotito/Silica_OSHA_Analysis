@@ -19,7 +19,8 @@ library(janitor)
 library(viridis) 
 library(sandwich)
 library(lmtest) 
-library(broom)
+library(broom) 
+library(equatiomatic)
 
 
 # Global options
@@ -52,7 +53,8 @@ How do eighthr ones look in terms of time?
 
 ```{r}
 study_dat |> 
-  filter(eighthr = )
+  filter(eighthr == "Y") |> 
+  summarize(mean = mean(time), sd = sd(time))
 ```
 
 ## Observations by Year 
@@ -61,19 +63,40 @@ Let's start by seeing how many measurements were recorded by year:
 
 ```{r}
 study_dat |>  
-  #mutate(year = as.numeric(year)) |> 
   group_by(year) |> 
-  summarize(measurements_in_year = n()) |> 
+  summarize(measurements_in_year = n(), .groups = 'drop') |>
+  mutate(year = as.numeric(as.character(year))) |>
+  complete(year = full_seq(year, 1), 
+           fill = list(measurements_in_year = 0)) |>
+  mutate(
+    label_vjust = case_when(
+      year %in% c(2010, 2015, 2026) ~ 2,  # Below
+      TRUE ~ -0.8  # Above (default)
+    ),
+    label_hjust = case_when(
+      year %in% c(2025,2023) ~ -0.4,  # More to the right
+      TRUE ~ 0.5  # Center (default)
+    )
+  ) |>
   ggplot(aes(x = year, y = measurements_in_year)) +
   geom_point(size = 2) + 
   geom_line() +
+  geom_text(aes(label = measurements_in_year, vjust = label_vjust, hjust = label_hjust), 
+            size = 3) +
   labs(
     title = "Number of Measurements by Year",
     x = "Year",
     y = "Count of Measurements"
   ) +
-  theme_classic()
-
+  scale_x_continuous(
+    breaks = seq(2004, 2026, 1),
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+     plot.title = element_text(hjust = 0.5)
+  )
 ```
 
 We have the most observations in 2024. We are also missing data for the year 2005.  
@@ -104,7 +127,8 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
     y = "Silica (mcg/m3)"
   )+ 
   theme_classic()+ 
-   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5)) 
 ``` 
 
 Let's try adding in a smooth line to see if there are any apparent long-term patterns: 
@@ -120,7 +144,8 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
     y = "Silica (mcg/m3)"
   )+ 
   theme_classic()+ 
-   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5)) 
 ```
 
 This may not be possible to see or use, as we may not have enough observations to appropriately fit our time series with year. We can try "zooming in": 
@@ -136,7 +161,8 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
     y = "Silica (mcg/m3)"
   )+ 
   theme_classic()+ 
-   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+   theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5)) +
 scale_y_continuous(
     limits = c(0, 500),
     breaks = seq(0, 500, by = 100)
@@ -193,7 +219,8 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
   theme_classic() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "right"
+    legend.position = "right",
+     plot.title = element_text(hjust = 0.5)
   )
 ```
 
@@ -216,11 +243,12 @@ ggplot(data = study_dat, aes(x = date_sampled, y = silica_conc)) +
     y = "Silica (mcg/m3)"
   )+ 
   theme_classic()+ 
-   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5)) 
 
 ```  
 
-
+#PEL Analysis
 
 Let's look at this a bit differently, with a bar graph that tells us how many observations exceed the PEL per year: 
 
@@ -250,6 +278,58 @@ study_dat |>
   theme(legend.position = "top")
   
 ``` 
+
+## Percentage Breakdown 
+
+This time, let's look at the % exceeding the PEL as a percentage each year: 
+
+```{r}
+over_PEL <- study_dat |> 
+  group_by(year) |> 
+  summarize(annual_pct_over_pel = round(mean(over_PEL == "TRUE")*100, 2))
+
+over_PEL 
+```
+
+Let's graph this: 
+
+```{r}
+ggplot(over_PEL, aes(year, annual_pct_over_pel))+
+  geom_col()+ 
+  labs(x = "Year", y = "Percentage of Measurements Exceeding 50 mcg/m³ (%)")+
+  ggtitle("Percentage of OSHA Respirable Silica Concentration Measurements Exceeding the PEL", subtitle = "By Year" )+ 
+  
+ geom_text(aes(label = paste0(annual_pct_over_pel, "%"), vjust = -0.5), size = 2.5)+  
+  
+   theme_classic()+
+  
+  theme(plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1)) 
+  
+
+```
+ 
+# IQR by Year 
+
+Next, let's get a table with the IQR and other study statistics for each year: 
+
+```{r}
+descriptive_table <- study_dat |> 
+  group_by(year) |> 
+  summarize(
+    n = n(),
+    Mean = round(mean(silica_conc),2), 
+    SD = round(sd(silica_conc),2),
+    IQR = round(IQR(silica_conc),2)
+    ) 
+
+descriptive_table
+
+```
+ 
+ 
+# Establishment Effect 
 
 What about how many establishments are the same? 
 
@@ -318,20 +398,26 @@ summary(mod_linear_reg)
  
 That gave us the trend when year is a character variable. Since we are missing 2005, we may need to initalize our data at year 2005. Then we can create a year counter for the year in the study, and estimate a numeric result: 
 
-### Subsetting data to exclude year 2005 
+### Year Counter
 
 ```{r}
-dat_06 <- study_dat |> 
-  filter(date_sampled > "2005-12-31") |> 
-  mutate(year = as.numeric(year))
+dat_clean <- study_dat |>  
+  mutate(year = as.numeric(as.character(year))) |>  
+  arrange(year) |>
+  mutate(year_counter = dense_rank(year) - 1) 
+
+dat_clean |> 
+  distinct(year, year_counter) |> 
+  arrange(year)
 ``` 
 
 Doing so has reduced our sample size down to 1,043.  
 
 Let's try our glm again: 
 ```{r}
-mod_linear_reg <- glm(silica_conc ~ year, data = dat_06)
-summary(mod_linear_reg)
+mod_linear_reg <- glm(silica_conc ~ year_counter, data = dat_clean)
+summary(mod_linear_reg) 
+extract_eq(mod_linear_reg)
 ```
 
 Very interesting, this time we see a small reduction in concentration over the years, but this is VERY insignificant. 
@@ -347,6 +433,7 @@ coeftest(mod_linear_reg,
                        type = "HC1")) 
 
 
+
 ``` 
 
 Not much has changed at all!   
@@ -358,9 +445,10 @@ Not much has changed at all!
 What if we instead investigate a logistic model that investigates whether the number of facilities exceeding the PEL has changed over the years? 
 
 ```{r}
-mod_logistic  <- glm(over_PEL~year, data = dat_06, 
+mod_logistic  <- glm(over_PEL~year_counter, data = dat_clean, 
                      family = binomial)
-summary(mod_logistic)
+summary(mod_logistic) 
+extract_eq(mod_logistic)
 ``` 
 
 We should not need to control for establishment here, since we are only looking at whether the proportion of facilities over PEL changed by year, but we can add in a random effect for establishment either way: 
@@ -407,18 +495,20 @@ It looks like we see a slight decrease in the odds of the measurements being abo
 What about the odds of annual measurements exceeding the action level? 
 
 ```{r}
-dat_06 <- dat_06 |> 
+dat_clean <- dat_clean |> 
   mutate(over_action = silica_conc >= 25)   
 
-mod_logistic2  <- glm(over_action~year, data = dat_06, 
+mod_logistic2  <- glm(over_action~year_counter, data = dat_clean, 
                      family = binomial)
-summary(mod_logistic2)
+summary(mod_logistic2) 
+extract_eq(mod_logistic2)
 
 mod_log_cluster2 <- coeftest(mod_logistic2,
          vcov = vcovCL(mod_logistic2,
                        cluster = ~ establishment,
                        type = "HC1"))   
-mod_log_cluster2
+mod_log_cluster2 
+
 
 tidy_result2 <- tibble(
   term = rownames(mod_log_cluster2),
@@ -437,4 +527,11 @@ tidy_result2 |>
   mutate(across(where(is.numeric), ~round(., 3)))
 
 ```
-There is no significant change in measurements exceeding the action level by year. 
+There is no significant change in measurements exceeding the action level by year.  
+
+
+
+# High Concentration Examinations
+
+Examine high concentrations--- are there consistencies within them?? 
+
