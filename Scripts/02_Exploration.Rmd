@@ -35,7 +35,7 @@ study_dat <- study_dat |>
 
 # Introduction 
 
-[enter introduction l8r]
+The following 
 
 # General Data Summaries  
 

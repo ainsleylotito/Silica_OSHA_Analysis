@@ -86,13 +86,21 @@ clean_osha <- function(df){
                           "mg/m3" = "MG_M3", #milligrams/m3
                           "mg/m3" = "M"), #milligrams/m3
     blank = as.logical(blank),
-    time = time/60,
-    less_than_measurement = grepl("^\\s*<", result),
+    duration = case_when(
+  time <= 30                  ~ "Task-Based",
+  time >= 31  & time <= 120   ~ "Short-Term",
+  time >= 121 & time <= 359   ~ "Medium-Term",
+  time >= 360                 ~ "Long-Term",
+  TRUE                        ~ NA_character_
+),
+    lod = grepl("^\\s*<", result),
     result_num = as.numeric(gsub("<\\s*", "", result))
     ) |> 
   select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
 }
-dat <- clean_osha(raw_dat) 
+dat <- clean_osha(raw_dat)  
+
+head(dat)
   
 ```
 
@@ -146,278 +154,6 @@ dat |>
   summarize(n())
 ```
 
-### Personal Measurements
-
-To start, we have 2,135 observations. Next, we want to see how many measurements pertain to personal measurements. 
-
-```{r}
-dat |> 
-  group_by(type) |> 
-  summarize(n())
-```
-
-
-
-Let's also check to see the distribution of samples by year: 
-
-```{r}
-dat |> 
-  group_by(year) |> 
-  summarize(count = n()) |> 
-  mutate(percent = (count/sum(count))*100)
-```
-*Note:* after excluding non-personal samples, we no longer have values that are in milligrams. 
-
-We are left with the resulting microgram observations, which do appear as though they are all lacking data on air volume. 
-
-Let's do one last check, as it is possible that these values correspond to the time-weighted average: 
-
-```{r} 
-#TWA groupings for just instances where unit of measurement is mcg
-dat |> 
-  filter(uom == "mcg") |> 
-  select(eighthr) |> 
-  group_by(eighthr) |> 
-  summarize(n()) 
-
-dat |> 
-  filter(uom =="mcg" & eighthr == "N") |> 
-  group_by(qualifier) |> 
-  summarize(n()) 
-
-dat |> 
-  filter(uom =="mcg" & eighthr == "N") |> 
-  group_by(air_volume) |>
-  summarise(
-    total_rows = n(),
-    non_na_values = sum(!is.na(air_volume)),
-    na_count = sum(is.na(air_volume))
-  )
-
-dat |> 
-  filter(uom =="mcg" & eighthr == "N") |> 
-  select(result_num) |> 
-  summary() 
-
-dat |> 
-  filter(uom =="mcg" & eighthr == "Y") |> 
-  select(result_num) |> 
-  summary() 
-
-```
-Ok, we have figured out what happened --> specifically the measurements that aren't standardized to volume all contains results less than the quantification limit or are blank.  
-
-Next, we want to scrutinize our observations that are a time-weighted average and are coded as "mcg" for the unit. Let's see what these measurements actually are:  
-```{r}
-mcg_time_weighted <- dat |> 
-  filter(uom =="mcg" & eighthr == "Y")  
-
-mcg_time_weighted |> 
-  select(result_num) |> 
-  summary() 
-
-#comparing to summary of observations that aren't time-weighted and are coded as "mcg/m3" -- 491 observations
-dat |> 
-  filter(uom == "mcg/m3" & eighthr == "N") |> 
-  select(result_num) |> 
-  summary()
-
-#comparing to those that ARE time-weighted and coded as "mcg/m3" -- 737 observations
-dat |> 
-  filter(uom == "mcg/m3" & eighthr == "Y") |>  
-  select(result_num) |> 
-  summary()
-``` 
-
-We want to go further, tracking if there are overlapping sampling numbers appear across these groups: 
-```{r}
-mcg_tw    <- dat |> filter(uom == "mcg" & eighthr == "Y")     |> mutate(group = "mcg_TW")
-m3_no_tw  <- dat |> filter(uom == "mcg/m3" & eighthr == "N")  |> mutate(group = "m3_notTW")
-m3_tw     <- dat |> filter(uom == "mcg/m3" & eighthr == "Y")  |> mutate(group = "m3_TW")
-
-all_three <- bind_rows(mcg_tw, m3_no_tw, m3_tw)
-
-# How many SAMPLING_NUMBERs appear in more than one group?
-overlap_check <- all_three |> 
-  group_by(sampling_number) |> 
-  summarise(
-    n_obs = n(),
-    n_field_numbers = n_distinct(field_number),
-    n_groups = n_distinct(group),
-    groups_present = paste(sort(unique(group)), collapse = ", "),
-    .groups = "drop"
-  ) |> 
-  filter(n_groups > 1)
-
-overlap_check
-
-all_three |> 
-  arrange(sampling_number, field_number) |> 
-  select(sampling_number, field_number, uom, eighthr, result_num, group) |> 
-  filter(sampling_number %in% overlap_check$sampling_number) 
-
-all_three |> 
-  group_by(field_number) |> 
-  summarise(
-    n_obs = n(),
-    n_groups = n_distinct(group),
-    .groups = "drop"
-  ) |> 
-  filter(n_groups > 1)
-```
-How many sampling numbers have TWA record:  
-```{r}
-# does this SAMPLING_NUMBER have an eighthr == "Y" record at all (regardless of uom)?
-twa_lookup <- dat |> 
-  group_by(sampling_number) |> 
-  summarise(
-    has_twa = any(eighthr == "Y"),
-    n_twa_records = sum(eighthr == "Y"),
-    n_component_records = sum(eighthr == "N"),
-    .groups = "drop"
-  )
-
-twa_lookup |> count(has_twa, n_twa_records)
-```
-
-Join back into records to see which are "covered" by a time weighted average:  
-```{r}
-mcg_components <- dat |> 
-  filter(uom == "mcg" & eighthr == "N") |> 
-  left_join(twa_lookup, by = "sampling_number")
-
-# how many of these component records belong to a sampling number that DOES have a TWA?
-mcg_components |> 
-  count(has_twa)
-```
-Looking at multiple TWA samples
-```{r}
-dat |> 
-  filter(eighthr == "Y") |> 
-  group_by(sampling_number) |> 
-  filter(n() > 1) |> 
-  select(sampling_number, field_number, uom, result_num, time) |>  
-  arrange(sampling_number) |> 
-  print(n = 30) 
-
-
-#check for 8-hr calculation: 
-check_calc_status <- dat |> 
-  filter(eighthr == "Y" & uom == "mcg/m3") |> 
-  group_by(sampling_number) |> 
-  summarise(
-    n_components = n(),
-    n_distinct_results = n_distinct(result_num),
-    all_results_identical = n_distinct(result_num) == 1,
-    total_time = sum(time, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Summary: how many sampling numbers have identical vs differing result_num across components?
-check_calc_status |> 
-  filter(n_components > 1) |>   # only relevant for sampling numbers with multiple media
-  count(all_results_identical) 
-
-# For sampling numbers with >1 component, does a duration-weighted average of the
-# individual result_num values recreate any single one of them, or land somewhere in between?
-check_calc_status_detail <- dat |> 
-  filter(eighthr == "Y" & uom == "mcg/m3") |> 
-  group_by(sampling_number) |> 
-  filter(n() > 1) |> 
-  summarise(
-    results = paste(round(result_num, 1), collapse = ", "),
-    times = paste(round(time, 2), collapse = ", "),
-    computed_twa = sum(result_num * time, na.rm = TRUE) / sum(time, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-check_calc_status_detail 
-
-check_calc_status2 <- dat |> 
-  filter(eighthr == "Y" & uom == "mcg/m3") |> 
-  group_by(sampling_number) |> 
-  summarise(
-    n_components = n(),
-    n_distinct_results = n_distinct(result_num),
-    all_results_identical = n_distinct(result_num) == 1,
-    all_results_zero = all(result_num == 0),
-    total_time = sum(time, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Break the "identical" bucket into trivial-zero vs genuine non-zero matches
-check_calc_status2 |> 
-  filter(n_components > 1) |> 
-  count(all_results_identical, all_results_zero)
-```
-
-
-
-### Time-weighted average observations 
-
-Next, we want to get an idea of how our samples may differ depending on how many of them used a time-weighted average. 
-
-```{r}
-dat |> 
-  group_by(eighthr) |> 
-  summarize(n()) 
-
-dat |> 
-  filter(eighthr == "STEL CEILING PEAK") |>
-  select(everything())  # STEL information 
-
-#examining time distribution by the time-weighted data: 
-dat |> 
-  group_by(eighthr) |>  
-  summarise(
-    count = n(),
-    mean = mean(result_num, na.rm = TRUE),
-    median = median(result_num, na.rm = TRUE),
-    min = min(result_num, na.rm = TRUE),
-    max = max(result_num, na.rm = TRUE),
-    sd = sd(result_num, na.rm = TRUE)
-  ) 
-
-#is there a time-trend component to the data that are missing time-weighting? 
-dat |> 
-  group_by(year, eighthr) |> 
-  summarize(count = n(), .groups = 'drop') |>
-  ggplot(aes(x = year, y = count, fill = eighthr)) +
-  geom_col(position = "dodge") +
-  labs(title = "Frequency by Year and Eight Hour Classification",
-       x = "Year",
-       y = "Count",
-       fill = "Eight Hour") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-``` 
-Looks like we will not be retaining any of the results corresponding to the STEL ceiling peak as they have way too short times of duration. 
-
-
-### Over 6-hours of duration 
-
-Let's create an indicator variable for whether the measurements were above 6-hours or not, and take a peek at what data remains: 
-
-```{r} 
-dat |> 
-  filter(eighthr == "Y") |> 
-  count()
-dat |> 
-  filter(eighthr == "Y") |> 
-  count()
-dat |> 
-  filter(eighthr == "N" & time >=6) |> 
-  count() 
-
-dat |> 
-  filter(eighthr == "N" & is.na(time) ) |> 
-  count()
-
-dat |> 
-  filter(eighthr == "N" & time <6) |> 
-  count() 
-
-``` 
 
 Before we exclude any data, we want to check if we have repeated measurements per establishments: 
 
@@ -628,7 +364,7 @@ dat3 <- dat3 |>
   filter(uom == "mcg/m3")
 ```
 
-We now have 1,396 observations. We will rename the results into a consistent variable name for later, called "silica_conc": 
+We now have 1,478 observations. We will rename the results into a consistent variable name for later, called "silica_conc": 
 
 ```{r}
 dat3 <- dat3 |> 
@@ -698,34 +434,22 @@ dat5 <- dat4_dedup |>
 We are left with 1,299 observations.
 
 
-### >= 6 hrs
+### Contains time data
 
-We need to ensure that we have measurements that were taken over 6 hours in length:
+We need to ensure that we have measurements that were taken contain data for time.
 
 ```{r} 
 dat5 |> 
-  mutate(six_hours = time >= 6) |>
-  filter(six_hours == "TRUE") |> 
-  group_by( year) |> 
-  summarise(n()) #checking that we have enough observations
+  group_by(duration) |> 
+  summarise(n()) 
 
-dat5 |> 
-  filter(is.na(time)) |> 
-  count() 
-dat5 |> 
-  filter(time < 6) |> 
-  count() 
-
-dat5 |> 
-  filter(time < 6 & is.na(time)) |> 
-  count() 
 
 dat6 <- dat5 |> 
-  filter(!(time < 6 & !is.na(time)))
+  filter(!(is.na(duration)))
 ``` 
-6 are missing time data. n = 797 are less than 6 hours in duration.   
+5 are missing time data.
 
-After excluding, we are left with 599 observations.
+After excluding NAs, we are left with 1,294 measurements.
 
 
 Let's check and see how many observations we have: 
@@ -738,7 +462,7 @@ Let's clean up our data too, only retaining the variables we need:
 
 ```{r}
 dat7 <- dat6 |> 
-  select(sampling_number, establishment, date_sampled, lab_number, field_number, time, imis, year, silica_conc)
+  select(sampling_number, establishment, date_sampled, lab_number, field_number, time, duration, imis, year, silica_conc, lod)
 ```
 
 
@@ -903,11 +627,11 @@ We only want to retain values that have the same Lab No., and values that corres
 ```{r}
 dust4 <- dust4 |> 
   select(lab_number, date_sampled, field_number, sampling_number, 
-         establishment, type, eighthr, time, dust_conc, dust_uom)
+         establishment, type, eighthr, time, dust_conc, dust_uom, duration, lod)
 
 quartz4 <- quartz4 |> 
   select(lab_number, date_sampled, field_number, sampling_number, establishment,
-          quartz_pct)
+          quartz_pct, duration, lod)
 ```
 
 Checks before joining: 
@@ -985,7 +709,7 @@ We are only going to retain the join keys and quartz pct before merging with dus
 
 # Remove unnecessary columns
 quartz_merge <- quartz4_dedup |> 
-  select(lab_number, field_number, quartz_pct)
+  select(lab_number, field_number, quartz_pct, lod, duration)
 
 #removing the hyphen part after number
 dust_merge <- dust4_dedup |> 
@@ -1010,9 +734,34 @@ quartz_merge|>
   nrow()
 
 nrow(merged_dust_quartz) 
-glimpse(merged_dust_quartz)
+glimpse(merged_dust_quartz) 
+
+
 ``` 
-Ok, looks like we have 1211 observations.  
+Ok, looks like we have 1211 observations.   
+
+Let's do a check to make sure that all the lods and durations match up; if so, we can delete one of the columns for both: 
+
+```{r}
+merged_dust_quartz |> 
+  summarise(
+    lod_mismatch      = sum(lod.x != lod.y, na.rm = TRUE),
+    duration_mismatch = sum(duration.x != duration.y, na.rm = TRUE),
+    both_mismatch      = sum(lod.x != lod.y & duration.x != duration.y, na.rm = TRUE),
+    either_mismatch    = sum(lod.x != lod.y | duration.x != duration.y, na.rm = TRUE)
+  )
+
+```
+They are the same! Great news, that means we can retain just one of the variables for each: 
+
+```{r}
+merged_dust_quartz <-  merged_dust_quartz |> 
+  select(-lod.y, -duration.y) |> 
+  rename(lod = lod.x,
+         duration = duration.x) 
+
+```
+
 
 Let's perform our calculation to get the official silica concentration, and add a variable for the year: 
 
@@ -1046,28 +795,17 @@ merged_dust_quartz3 <- merged_dust_quartz2|>
 ```
 
 
-## >= 6 hrs 
+## Contains time data
 
 ```{r} 
 merged_dust_quartz3 |> 
-  mutate(six_hours = time >= 6) |>
-  filter(six_hours == "TRUE") |> 
-  group_by( year) |> 
-  summarise(n()) #checking that we have enough observations
+  group_by(duration) |> 
+  summarise(n()) 
 
-merged_dust_quartz3|> 
-  filter(is.na(time)) |> 
-  count() 
-merged_dust_quartz3|> 
-  filter(time < 6) |> 
-  count() 
-
-merged_dust_quartz3 |> 
-  filter(time < 6 & is.na(time)) |> 
-  count() 
 
 merged_dust_quartz4 <- merged_dust_quartz3|> 
-  filter(!(time < 6 & !is.na(time)))
+ filter(!(is.na(duration)))
+nrow(merged_dust_quartz4)
 ``` 
 
 # Merge Respirable and Calculated data 
