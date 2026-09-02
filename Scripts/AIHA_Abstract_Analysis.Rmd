@@ -35,7 +35,22 @@ study_dat <- study_dat |>
 
 # Introduction 
 
-The following data exploration will produce descriptive statistics and explore the distribution of data in terms of duration of exposure for use of an AIHA abstract.
+The following data exploration will produce descriptive statistics and explore the distribution of data in terms of duration of exposure for use of an AIHA abstract. 
+
+# Data Exclusion 
+
+For the purposes of this analysis, we will begin by excluding observations taking place in 2026 so we can have full year data: 
+
+```{r}
+study_dat |> 
+  filter(year == 2026) |> 
+  count() 
+
+study_dat <- study_dat |> 
+  filter(year != 2026)
+```
+We excluded 92 observations.
+
 
 # General Data Summaries   
 
@@ -63,11 +78,110 @@ study_dat |>
   count() 
 
 #percentage 
-(115/2381)*100 
+(74/2330)*100 
 
 #by duration 
 study_dat |> 
   group_by(duration,lod) |> 
   count() 
+``` 
+
+## Over PEL  
+
+Let's start by summarizing in terms of by year: 
+
+```{r} 
+study_dat <- study_dat |> 
+  mutate(over_PEL = silica_conc >= 50) 
+
+over_PEL_annual <- study_dat |> 
+  group_by(year) |> 
+  summarize(annual_pct_over_pel = round(mean(over_PEL == "TRUE")*100, 2))
+
+over_PEL_annual 
 ```
+
+Next, let's summarize in terms of duration category:  
+
+```{r}
+over_PEL_duration <- study_dat |> 
+  group_by(duration) |> 
+  summarize(annual_pct_over_pel = round(mean(over_PEL == "TRUE")*100, 2))
+
+over_PEL_duration 
+```
+
+
+# Plots 
+
+## AL and PEL plot 
+
+```{r}
+# --- Prep: order duration groups, label lod status ---
+plot_dat <- study_dat %>%
+  mutate(
+    duration = factor(duration,
+                         levels = c("Task-Based", "Short-Term", "Medium-Term", "Long-Term")),
+    lod_status = factor(lod, levels = c(FALSE, TRUE),
+                         labels = c("Reported Measurement", "Below LOD"))
+  ) 
+
+ggplot(plot_dat, aes(x = duration, y = silica_conc, shape = lod_status, color = lod_status)) +
+  
+  # Reported Measurement: drawn first (bottom layer), semi-transparent
+  geom_jitter(
+    data = subset(plot_dat, lod_status == "Reported Measurement"),
+    width = 0.15, size = 1.3, alpha = 0.8
+  ) +
+  
+  # Below LOD: drawn second (top layer), fully opaque, no alpha
+  geom_jitter(
+    data = subset(plot_dat, lod_status == "Below LOD"),
+    width = 0.15, size = 1.3, alpha = 1
+  ) +
+
+  # Reference limits (fixed colors via override so they don't clash with the point color scale)
+  geom_hline(aes(yintercept = 25, linetype = "Action Level (25 µg/m³)"),
+             color = "#ff7f0e", linewidth = 0.8) +
+  geom_hline(aes(yintercept = 50, linetype = "PEL (50 µg/m³)"),
+             color = "#d62728", linewidth = 0.8) +
+  scale_y_log10(
+    breaks = c(1, 5, 10, 25, 50, 100, 500, 1000, 5000), 
+    limits = c(1, 6000)
+  ) +
+  scale_shape_manual(
+    name = "Measurement Type",
+    values = c("Reported Measurement" = 16,
+               "Below LOD" = 17)
+  ) +
+  scale_color_manual(
+    name = "Measurement Type",
+    values = c("Reported Measurement" = "grey40",
+               "Below LOD" = "black")
+  ) +
+  scale_linetype_manual(
+    name = "Reference Limits",
+    values = c("Action Level (25 µg/m³)" = "dashed",
+               "PEL (50 µg/m³)" = "dotdash")
+  ) +
+  guides(
+    linetype = guide_legend(override.aes = list(colour = c("#ff7f0e", "#d62728")))
+  ) +
+  labs(
+    title = "Respirable Crystalline Silica Concentration by Sample Duration Category",
+    x = NULL,
+    y = "RCS Concentration (µg/m³) [Log10 Scale]"
+  ) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    legend.box = "vertical", 
+    legend.key.size = unit(0.3, "cm"),
+     legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9)
+  )
+``` 
+
+
 
