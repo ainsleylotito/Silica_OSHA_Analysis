@@ -35,7 +35,11 @@ study_dat <- study_dat |>
 
 # Introduction 
 
-The following 
+The following data exploration will produce descriptive statistics and explore the distribution of data in terms of duration of exposure. 
+
+Later on, sequential models will be fit. 
+
+**NOTE**: the last time this page was updated it used an old dataset that had excluded observations under 6 hours in duration.
 
 # General Data Summaries  
 

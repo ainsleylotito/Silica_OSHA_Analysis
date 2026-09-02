@@ -1,0 +1,73 @@
+---
+title: "AIHA Abstract Analysis"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    toc_float: true 
+    code_folding: hide 
+---
+
+```{r setup, include = FALSE}
+# Load packages
+library(tidyverse)
+library(ggplot2) 
+library(readxl) 
+library(lubridate)
+library(janitor) 
+library(viridis) 
+library(sandwich)
+library(lmtest) 
+library(broom) 
+library(equatiomatic)
+
+
+# Global options
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+study_dat <- read.csv("../CleanData/study_dat.csv") 
+
+study_dat <- study_dat |> 
+  mutate(year = as.factor(year),
+         date_sampled = ymd(date_sampled))
+```
+
+# Introduction 
+
+The following data exploration will produce descriptive statistics and explore the distribution of data in terms of duration of exposure for use of an AIHA abstract.
+
+# General Data Summaries   
+
+How many observations? 
+```{r}
+nrow(study_dat)
+```
+
+## Study Period 
+
+I.E., what dates/years are covered by the time series data? 
+
+```{r}
+range(study_dat$date_sampled)
+```
+ 
+ 
+## LOD  
+
+How many observations were LOD? By duration?  
+
+```{r}
+study_dat |> 
+  group_by(lod) |> 
+  count() 
+
+#percentage 
+(115/2381)*100 
+
+#by duration 
+study_dat |> 
+  group_by(duration,lod) |> 
+  count() 
+```
+
