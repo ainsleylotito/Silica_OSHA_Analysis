@@ -66,7 +66,51 @@ I.E., what dates/years are covered by the time series data?
 ```{r}
 range(study_dat$date_sampled)
 ```
+  
+  
+## How many samples per year? 
+
+```{r}
+study_dat |> 
+  group_by(year) |> 
+  summarize(n_year = n()) |> 
+  summarize(
+    min_n = min(n_year),
+    max_n = max(n_year)
+  ) 
+
+study_dat |> 
+  group_by(year) |> 
+  summarize(n_year = n()) 
+  
+```
  
+## Duration 
+
+### N by duration
+
+```{r}
+study_dat |> 
+  group_by(duration) |> 
+  count()
+```
+### Concentration by Duration 
+
+```{r}
+study_dat |> 
+  group_by(duration) |> 
+  summarize(
+    min_conc = min(silica_conc, na.rm = TRUE),
+    max_conc = round(max(silica_conc, na.rm = TRUE),1),
+    n_total  = n(), 
+    below_lod = sum(lod), 
+    pct_lod = round((100 * below_lod / n_total),1),
+    over_AL  = sum(silica_conc > 25, na.rm = TRUE),
+    over_PEL = sum(silica_conc > 50, na.rm = TRUE),
+    pct_over_AL  = round((100 * over_AL / n_total),1),
+    pct_over_PEL = round((100 * over_PEL / n_total),1)
+  )
+```
  
 ## LOD  
 
@@ -184,4 +228,276 @@ ggplot(plot_dat, aes(x = duration, y = silica_conc, shape = lod_status, color = 
 ``` 
 
 
+## Over PEL Plot: 
+
+```{r, fig.width = 10} 
+study_dat <- study_dat |> 
+  mutate(over_PEL = silica_conc > 50) 
+
+over_PEL <- study_dat |> 
+  group_by(year) |> 
+  summarize(annual_pct_over_pel = round(mean(over_PEL == "TRUE")*100, 2))
+
+over_PEL 
+ggplot(over_PEL, aes(year, annual_pct_over_pel))+
+  geom_col()+ 
+  labs(x = "Year", y = "Percentage of Measurements Exceeding 50 mcg/m³ (%)")+
+  ggtitle("Percentage of OSHA Respirable Silica Concentration Measurements\n Exceeding the PEL", subtitle = "By Year" )+ 
+  
+ geom_text(aes(label = paste0(annual_pct_over_pel, "%"), vjust = -0.5), size = 2.5)+  
+  
+   theme_classic()+
+  
+  theme(plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+What about Over PEL by Duration?? 
+
+```{r, fig.width = 12, fig.height= 8}
+over_PEL_duration <- study_dat |> 
+  group_by(year,duration) |> 
+  summarize(annual_pct_over_pel = round(mean(over_PEL == "TRUE")*100, 2))
+
+over_PEL_duration 
+ggplot(over_PEL_duration, aes(year, annual_pct_over_pel))+ 
+  facet_wrap(~duration)+
+  geom_col()+ 
+  labs(x = "Year", y = "Percentage of Measurements Exceeding 50 mcg/m³ (%)")+
+  ggtitle("Percentage of OSHA Respirable Silica Concentration Measurements\n Exceeding the PEL", subtitle = "By Year and Duration" )+ 
+  
+ geom_text(aes(label = paste0(annual_pct_over_pel, "%"), vjust = -0.5), size = 2)+  
+  
+   theme_classic()+
+  
+  theme(plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+# Temporal Trends 
+
+## Median concentration reported per year 
+
+The OSHA citations database was used to analyze the median concentration reported per year. We can replicate the same analysis:  
+
+Do we have all of the years covered by this data? 
+
+```{r}
+study_dat |> 
+  select(year) |> 
+  unique()
+``` 
+
+We are missing data for the year 2005. We will also have to do the year counter process.
+
+## Year Counter Creaqtion
+
+```{r}
+dat_clean <- study_dat |>  
+  mutate(year = as.numeric(as.character(year))) |>  
+  arrange(year) |>
+  mutate(year_counter = dense_rank(year) - 1) 
+
+dat_clean |> 
+  distinct(year, year_counter) |> 
+  arrange(year)
+``` 
+
+## Crude mod:  
+
+Get the median by year first, then fit linear trend.
+
+```{r}
+median_by_year <- dat_clean |> 
+  group_by(year_counter) |> 
+  summarize(median_conc = median(silica_conc, na.rm = TRUE))  
+
+ggplot(data=median_by_year,aes(year_counter,median_conc))+ 
+  geom_point()+
+  geom_line()
+
+mod_median_trend <- lm(median_conc ~ year_counter, data = median_by_year)
+summary(mod_median_trend)
+```
+There is a statistically significant relationship here whereby the median concentration increases by 1.3 units for each additional year in the study period.  
+
+
+## Median by Duration 
+
+Get the median by year and duration:
+
+```{r}
+median_by_year_and_duration <- dat_clean |> 
+  group_by(year_counter,duration) |> 
+  summarize(median_conc = median(silica_conc, na.rm = TRUE))  
+
+ggplot(data=median_by_year_and_duration,aes(year_counter,median_conc))+  
+  facet_wrap(~duration)+
+  geom_point()+
+  geom_line()
+
+mod_median_trend2 <- lm(median_conc ~ year_counter*duration, data = median_by_year_and_duration)
+summary(mod_median_trend2)
+```
+
+
+There is no significant trend when we differentiate by duration.
+
+
+# All measurements 
+
+## Linear Model
+
+Let's try our glm again, this time with the pure silica conc instead of median concentration: 
+```{r}
+mod_linear_reg <- glm(silica_conc ~ year_counter, data = dat_clean)
+summary(mod_linear_reg) 
+extract_eq(mod_linear_reg)
+```
+
+Let's control for our within-establishment variation: 
+
+```{r}
+coeftest(mod_linear_reg, 
+         vcov = vcovCL(mod_linear_reg, 
+                       cluster = ~ establishment,
+                       type = "HC1")) 
+
+
+```
+
+### By Duration 
+
+This time, let's see whether duration interacts with this relationship: 
+
+```{r}
+mod_linear_reg2 <- glm(silica_conc ~ year_counter * duration, data = dat_clean)
+summary(mod_linear_reg2) 
+extract_eq(mod_linear_reg2)
+```
+This time it appears that as years increase the concentration goes down, but when it is task based the conc. intercept increases... 
+
+Let's plot what the model is showing us: 
+
+```{r}
+# Generate predictions from the model across the range of year_counter for each duration
+pred_grid <- dat_clean |> 
+  distinct(duration) |> 
+  tidyr::crossing(year_counter = seq(min(dat_clean$year_counter, na.rm = TRUE), 
+                                       max(dat_clean$year_counter, na.rm = TRUE), 
+                                       length.out = 100))
+
+pred_grid$predicted <- predict(mod_linear_reg2 , newdata = pred_grid)
+
+ggplot() +
+  geom_point(data = dat_clean, aes(x = year_counter, y = silica_conc, color = duration), alpha = 0.3) +
+  geom_line(data = pred_grid, aes(x = year_counter, y = predicted, color = duration), linewidth = 1.2) +
+  facet_wrap(~ duration, scales = "free_y") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+
+### Over PEL
+
+What if we instead investigate a logistic model that investigates whether the number of facilities exceeding the PEL has changed over the years? 
+
+```{r} 
+
+
+
+mod_logistic  <- glm(over_PEL~year_counter, data = dat_clean, 
+                     family = binomial)
+summary(mod_logistic) 
+extract_eq(mod_logistic)
+``` 
+
+No significant relationship here. 
+
+We should not need to control for establishment here, since we are only looking at whether the proportion of facilities over PEL changed by year, but we can add in a random effect for establishment either way: 
+
+```{r}
+
+coeftest(mod_logistic,
+         vcov = vcovCL(mod_logistic,
+                       cluster = ~ establishment,
+                       type = "HC1")) 
+```  
+
+
+
+# Do Establishments improve over time? 
+
+We want to check out the establishments that have multiple observations, and investigate whether they improve over time: 
+
+
+Some establishments have multiple samples on the same day, so we will take the median conc only for those instances: 
+
+```{r}
+est_daily <- study_dat |> 
+  group_by(establishment, date_sampled) |> 
+  summarize(median_conc = median(silica_conc, na.rm = TRUE), .groups = "drop")
+``` 
+
+Next we only keep establishments with multiple distinct sampling dates: 
+
+```{r}
+est_multi <- est_daily |> 
+  group_by(establishment) |> #just looking at establishment
+  filter(n() >= 2) |> #only those that have multiple measurements
+  arrange(establishment, date_sampled)#in order of date sampled
+``` 
+
+
+Let's figure out the change between consecutive measurements: 
+
+```{r}
+est_changes <- est_multi |> 
+  group_by(establishment) |> 
+  mutate(
+    conc_change = median_conc - lag(median_conc), #median conc measurement MINUS the previous one
+    days_elapsed = as.numeric(date_sampled - lag(date_sampled)), #number of days between consecuitve measurements
+    years_elapsed = days_elapsed / 365.25, #converting days into years
+    rate_per_year = conc_change / years_elapsed #the change in establishments divided by time elaspsed
+  ) |> 
+  filter(!is.na(conc_change))  #removing rows where conc_change is NA (each establishment's first row -- only retaining a measured change between two timepoints)
+```
+
+```{r}
+est_changes
+
+est_changes |> 
+  ungroup() |> 
+  summarize(
+    mean_rate = mean(rate_per_year, na.rm = TRUE),
+    median_rate = median(rate_per_year, na.rm = TRUE)
+  )
+
+#NOTE: this includes changes between the same establishment at different time points (i.e., if an establishment was measured 3 times, it will contribute 2 changes below)
+est_changes |> 
+  ungroup() |> 
+  mutate(direction = case_when(
+    conc_change < 0 ~ "improved",
+    conc_change > 0 ~ "worsened",
+    TRUE ~ "unchanged"
+  )) |> 
+  count(direction) |> 
+  mutate(pct = 100 * n / sum(n))
+```
+
+
+```{r, fig.height=20, fig.width=20} 
+ggplot(est_multi, aes(x = date_sampled, y = median_conc)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ establishment, scales = "free_x") +
+  labs(x = "Date sampled", y = "Median silica concentration") +
+  theme_minimal() +
+  theme(strip.text = element_text(size = 7))
+
+```
 
