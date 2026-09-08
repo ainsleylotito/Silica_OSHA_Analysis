@@ -30,7 +30,8 @@ study_dat <- read.csv("../CleanData/study_dat.csv")
 
 study_dat <- study_dat |> 
   mutate(year = as.factor(year),
-         date_sampled = ymd(date_sampled))
+         date_sampled = ymd(date_sampled), 
+         log_conc = log(silica_conc))
 ```
 
 # Introduction 
@@ -308,18 +309,29 @@ dat_clean |>
 
 ## Crude mod:  
 
-Get the median by year first, then fit linear trend.
+Get the median by year first, then fit linear trend. 
+
+Issue: we can't easily log-transform data with so many zeros.  
+
+How many zeroes were censored?? 
 
 ```{r}
-median_by_year <- dat_clean |> 
-  group_by(year_counter) |> 
-  summarize(median_conc = median(silica_conc, na.rm = TRUE))  
+study_dat |> 
+  group_by(lod) |> 
+  filter(silica_conc == 0) |> 
+  count() 
 
-ggplot(data=median_by_year,aes(year_counter,median_conc))+ 
-  geom_point()+
-  geom_line()
 
-mod_median_trend <- lm(median_conc ~ year_counter, data = median_by_year)
+study_dat |> 
+  filter(silica_conc == 0) |>  
+  group_by(imis) |> 
+  count()
+
+```
+
+```{r}
+mod_median_trend <- lm(log_conc ~ year_counter, data = dat_clean) 
+
 summary(mod_median_trend)
 ```
 There is a statistically significant relationship here whereby the median concentration increases by 1.3 units for each additional year in the study period.  
@@ -358,16 +370,6 @@ summary(mod_linear_reg)
 extract_eq(mod_linear_reg)
 ```
 
-Let's control for our within-establishment variation: 
-
-```{r}
-coeftest(mod_linear_reg, 
-         vcov = vcovCL(mod_linear_reg, 
-                       cluster = ~ establishment,
-                       type = "HC1")) 
-
-
-```
 
 ### By Duration 
 
