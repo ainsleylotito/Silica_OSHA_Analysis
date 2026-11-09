@@ -100,7 +100,21 @@ clean_osha <- function(df){
 }
 dat <- clean_osha(raw_dat)  
 
-head(dat)
+head(dat) 
+
+dat |> 
+  filter(result_num == 0) |> 
+  nrow()
+
+dat |> 
+  filter(result_num == 0) |> 
+  select(result_num) |> 
+  head() 
+
+#smallest result? 
+dat |> 
+  filter(result_num != 0) |> 
+  summarise(min_nonzero = min(result_num, na.rm = TRUE))
   
 ```
 
@@ -455,8 +469,19 @@ After excluding NAs, we are left with 1,294 measurements.
 Let's check and see how many observations we have: 
 
 ```{r}
-glimpse(dat6)
+glimpse(dat6) 
 ``` 
+
+
+Quick check for result numeric equal to 0 : 
+
+```{r}
+dat6 |> 
+  filter(result_num == 0) |> 
+  nrow()
+
+``` 
+
 
 Let's clean up our data too, only retaining the variables we need: 
 
