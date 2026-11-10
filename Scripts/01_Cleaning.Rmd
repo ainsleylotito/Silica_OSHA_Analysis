@@ -47,7 +47,8 @@ New variables created during the cleaning process, as well as a description of a
 ## Data Import and Initial Examination
 
 ```{r import_data, results= FALSE}
-raw_dat <- read_delim("../RawData/Respirable_Silica_Data.txt", delim = "|") 
+raw_dat <- read_delim("../RawData/Respirable_Silica_Data.txt", delim = "|",
+           col_types = cols(Result = col_character())) 
 glimpse(raw_dat)
 head(raw_dat) 
 tail(raw_dat)
@@ -396,7 +397,7 @@ dat3 |>
 
 
 dat4 <- dat3 |> 
-  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t")))
+  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND")))
 ```
 We gave removed blank samples (n =1) and samples that were recorded as both ND (LOQ) and Blank (n = 368), and those recorded as ND, Blank/t (n =3).  
 
@@ -497,12 +498,14 @@ Next, we need to import the data pertaining to the other two codes.
 We need to be certain that the samples match with each other (matching on "Lab No."), before multiplying the respirable dust concentration by the quartz percentage for corresponding samples.  
 
 ```{r}
-dust_dat <- read_delim("../RawData/Respirable_Dust_Concentration.txt", delim = "|") 
+dust_dat <- read_delim("../RawData/Respirable_Dust_Concentration.txt", delim = "|",
+           col_types = cols(Result = col_character()))
 glimpse(dust_dat)
 head(dust_dat) 
 tail(dust_dat) 
 
-quartz_dat <- read_delim("../RawData/Crystalline_Quartz_Fraction.txt", delim = "|") 
+quartz_dat <- read_delim("../RawData/Crystalline_Quartz_Fraction.txt", delim = "|",
+           col_types = cols(Result = col_character()))
 glimpse(quartz_dat)
 head(quartz_dat) 
 tail(quartz_dat)
@@ -636,10 +639,10 @@ quartz3|>
   count() 
 
 dust4 <- dust3 |> 
-  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND-BLK\t\t\t", "ND-BLK\t\t\t\t"))) 
+  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND-BLK\t\t\t", "ND-BLK\t\t\t\t", "ND"))) 
 
 quartz4 <- quartz3 |> 
-  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND-BLK\t\t\t", "ND-BLK\t\t\t\t")))
+  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND-BLK\t\t\t", "ND-BLK\t\t\t\t", "ND")))
 
 ```
 
@@ -853,7 +856,11 @@ dat7 <- dat7 |>
 ```{r}
 combined_dat <- bind_rows(dat7, merged_dust_quartz5)
 nrow(combined_dat) 
-glimpse(combined_dat)
+glimpse(combined_dat) 
+
+combined_dat |> 
+  filter(silica_conc == 0) |> 
+  count(imis)
 ``` 
 
 #Data check 
