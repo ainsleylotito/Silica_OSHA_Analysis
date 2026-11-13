@@ -8,11 +8,22 @@ workplace exposures.
 
 ## Data
 
-Raw datafiles are in the `/RawData` directory. -
-Respirable_Silica_Data.txt contains the OSHA samples from 1984-2026 for
-**Silica, Crystaline, and Mixed Respirable (Quartz, Cristobalite,
-Tridymite)** \[IMIS Code: 9000\]. Data was restricted to industries
-categorized as NAICS:327991. Data were pulled on August 20, 2026.
+Raw datafiles are in the `/RawData` directory.
+
+- Respirable_Silica_Data.txt contains the OSHA samples from 1984-2026
+  for **Silica, Crystaline, and Mixed Respirable (Quartz, Cristobalite,
+  Tridymite)** \[IMIS Code: 9000\]. Data was restricted to industries
+  categorized as NAICS:327991. Data were pulled on August 20, 2026.
+
+- Respirable_Dust_Concentration.txt contains the OSHA samples from
+  1984-2026 for **Respirable Dust Concentration** \[IMIS Code: 9130\].
+  Data was restricted to industries categorized as NAICS:327991. Data
+  were pulled on August 24, 2026.
+
+- Crystalline_Quartz_Fraction.txt contains the OSHA samples from
+  1984-2026 for **Crystalline Quartz Fraction \[%\]** \[IMIS Code:
+  9010\]. Data was restricted to industries categorized as NAICS:327991.
+  Data were pulled on August 24, 2026.
 
 ### Data sources:
 
@@ -33,4 +44,6 @@ and \[packages\] tools.
 ## Reproducibility
 
 All analyses can be reproduced by running the scripts in the `/Scripts`
-directory, starting with `01_Cleaning` then `02_Analysis`.
+directory, starting with `01_Cleaning` then `02_Exploration`. All
+analyses used to yield the AIHA Abstract results are contained within
+`AIHA_Abstract_Analysis.Rmd`.

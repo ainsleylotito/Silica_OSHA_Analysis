@@ -67,6 +67,11 @@ Convert result to numeric, check how many are blanks? Also check how many are pe
 
 To start, let's simply apply some reformats to our data. We will make this a function to save time later: 
 
+
+*A quick update as of 11/13/2026:*
+
+*Upon further investigation, I found that the `qualifier` variable was being read in incorrectly due to the fact that it was the last one in each line of the txt file. we kept having trailing sequences of `\t\t\t\t`, indicating that a bunch of tabs were being read in. For some reason, the data had training tabs at the end. So we are going to remove those trailing tabs in the function, which will clean up our qualifier variable considerably.*
+
 ```{r} 
 clean_osha <- function(df){
   df |> 
@@ -86,7 +91,7 @@ clean_osha <- function(df){
                           "mcg/m3" = "MCG/M3", #micrograms/m3
                           "mg/m3" = "MG_M3", #milligrams/m3
                           "mg/m3" = "M"), #milligrams/m3
-    blank = as.logical(blank),
+    across(qualifier, ~ na_if(str_squish(.x), "")),
     duration = case_when(
   time <= 30                  ~ "Task-Based",
   time >= 31  & time <= 120   ~ "Short-Term",
@@ -95,13 +100,16 @@ clean_osha <- function(df){
   TRUE                        ~ NA_character_
 ),
     lod = grepl("^\\s*<", result),
+ loq = grepl("ND", qualifier),
     result_num = as.numeric(gsub("<\\s*", "", result))
     ) |> 
-  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
+  select(-office, -naics, -date_reported, -csho, -sic, -instrument) 
 }
 dat <- clean_osha(raw_dat)  
 
-head(dat) 
+head(dat)  
+
+unique(dat$qualifier)
 
 dat |> 
   filter(result_num == 0) |> 
@@ -148,7 +156,7 @@ Another important aspect is that we have some units of measurement that are simp
 
 ```{r}
 dat |> 
-  filter(uom == c("M", "MG", "X", "Y")) |> 
+  filter(uom == c("mg/m3", "mcg/m3", "mg", "mcg")) |> 
   select(uom, air_volume) |>
   group_by(uom) |>
   summarise(
@@ -388,20 +396,29 @@ dat3 <- dat3 |>
 
 
 ### No blank samples 
-Next we will exclude all samples that were recorded as blank. 
+
+Next we will exclude all samples that were recorded as blank.  
+
+In this case, we only have samples that are coded as BOTH non-detect and blanks, rather than just blank alone. Because of this, we will retain all of the observations. 
 
 ```{r} 
 dat3 |> 
   group_by(qualifier) |> 
+  count()  
+dat3 |> 
+  group_by(qualifier,loq) |> 
   count() 
+dat3 |> 
+  group_by(blank) |> 
+  count()
 
 
 dat4 <- dat3 |> 
-  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND")))
-```
-We gave removed blank samples (n =1) and samples that were recorded as both ND (LOQ) and Blank (n = 368), and those recorded as ND, Blank/t (n =3).  
+  filter(blank == "N") 
 
-We now have 1470 observations.
+```
+
+
 
 ### No duplicate samples   
 
@@ -420,6 +437,8 @@ dat4_duplicates |>
   select(lab_number, field_number, date_sampled, establishment, silica_conc) |> 
   head()
 
+nrow(dat4_duplicates)
+
 #all variables 
 dat4_duplicates |>   
   head()
@@ -432,6 +451,9 @@ nrow(dat4_dedup) #how many rows are left after deleting duplicates?
 
 
 ```
+
+After removing duplicates, we have 872 observations.
+
 
 ### Only Personal Measurements  
 
@@ -446,7 +468,7 @@ dat5 <- dat4_dedup |>
   filter(type == "Personal")
 ```
 
-We are left with 1,299 observations.
+We are left with 865 observations after removing 7 area measurements.
 
 
 ### Contains time data
@@ -462,9 +484,8 @@ dat5 |>
 dat6 <- dat5 |> 
   filter(!(is.na(duration)))
 ``` 
-5 are missing time data.
+3 are missing time data.
 
-After excluding NAs, we are left with 1,294 measurements.
 
 
 Let's check and see how many observations we have: 
@@ -479,7 +500,12 @@ Quick check for result numeric equal to 0 :
 ```{r}
 dat6 |> 
   filter(result_num == 0) |> 
-  nrow()
+  nrow() 
+
+dat6 |> 
+  filter(result_num == 0) |> 
+  group_by(loq) |> 
+  count()
 
 ``` 
 
@@ -488,7 +514,7 @@ Let's clean up our data too, only retaining the variables we need:
 
 ```{r}
 dat7 <- dat6 |> 
-  select(sampling_number, establishment, date_sampled, lab_number, field_number, time, duration, imis, year, silica_conc, lod)
+  select(sampling_number, establishment, date_sampled, lab_number, field_number, time, duration, imis, year, silica_conc, lod, loq)
 ```
 
 
@@ -631,20 +657,56 @@ We need to ensure that we don't have blank measurements in either the dust or qu
 
 ```{r}
 dust3 |> 
+  group_by(blank) |> 
+  count() 
+
+dust3 |> 
+  filter(blank == "N") |> 
   group_by(qualifier) |> 
   count()
 
 quartz3|> 
+  group_by(blank) |> 
+  count()  
+
+quartz3 |> 
+  filter(blank == "N") |> 
   group_by(qualifier) |> 
-  count() 
+  count()
 
-dust4 <- dust3 |> 
-  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND-BLK\t\t\t", "ND-BLK\t\t\t\t", "ND"))) 
 
-quartz4 <- quartz3 |> 
-  filter(!(qualifier %in% c("BLK","ND-BLK", "ND-BLK/t", "ND-BLK\t\t\t", "ND-BLK\t\t\t\t", "ND")))
+``` 
+
+Real quick, let's look at that AAAAAA result: 
+
+
+```{r}
+quartz3 |> 
+  filter(qualifier == "AAAAAA") |> 
+  slice(1)
 
 ```
+
+Looks like a legitimate result. Because of that, we will retain it in our study. 
+
+We will move forward with removing the blank values and instances of blanks from the qualifier:
+
+```{r}
+
+dust4 <- dust3 |>
+  filter(blank == "N",
+         !str_detect(coalesce(qualifier, ""), "BLK"))
+
+quartz4 <- quartz3 |>
+  filter(blank == "N",
+         !str_detect(coalesce(qualifier, ""), "BLK"))
+
+nrow(dust4)
+
+nrow(quartz4)
+
+```
+
 
 
 ## No duplicate samples 
@@ -655,11 +717,11 @@ We only want to retain values that have the same Lab No., and values that corres
 ```{r}
 dust4 <- dust4 |> 
   select(lab_number, date_sampled, field_number, sampling_number, 
-         establishment, type, eighthr, time, dust_conc, dust_uom, duration, lod)
+         establishment, type, eighthr, time, dust_conc, dust_uom, duration, lod, loq)
 
 quartz4 <- quartz4 |> 
   select(lab_number, date_sampled, field_number, sampling_number, establishment,
-          quartz_pct, duration, lod)
+          quartz_pct, duration, lod, loq, time)
 ```
 
 Checks before joining: 
@@ -692,8 +754,13 @@ dust4_dedup <- dust4|>
   distinct(lab_number, field_number, dust_conc, date_sampled, 
            .keep_all = TRUE) 
 
-nrow(dust4_dedup) #how many rows are left after deleting duplicates?  
+nrow(dust4_dedup) #how many rows are left after deleting duplicates?   
+
+dust4_dedup |> 
+  filter(loq == FALSE, 
+         dust_conc == 0)
 ``` 
+
 
 ###Quartz 
 
@@ -718,10 +785,15 @@ quartz4_duplicates |>
   head()
 
 quartz4_dedup <- quartz4|> 
-  distinct(lab_number, field_number, quartz_pct, date_sampled, 
+  distinct(lab_number, field_number, quartz_pct, date_sampled, time,
            .keep_all = TRUE) 
 
-nrow(quartz4_dedup) #how many rows are left after deleting duplicates? 
+nrow(quartz4_dedup) #how many rows are left after deleting duplicates?  
+
+quartz4_dedup |> 
+  filter(loq == FALSE, 
+         quartz_pct==0) |> 
+  pull(field_number)
 ```
 
 
@@ -737,7 +809,7 @@ We are only going to retain the join keys and quartz pct before merging with dus
 
 # Remove unnecessary columns
 quartz_merge <- quartz4_dedup |> 
-  select(lab_number, field_number, quartz_pct, lod, duration)
+  select(lab_number, field_number, quartz_pct, lod, loq, duration)
 
 #removing the hyphen part after number
 dust_merge <- dust4_dedup |> 
@@ -751,14 +823,23 @@ glimpse(quartz_merge)
 
 
 ```{r}
+quartz_merge <- quartz4_dedup |> 
+  select(lab_number, field_number, quartz_pct, lod, loq, date_sampled, time)
 
-merged_dust_quartz <- quartz_merge|> 
-  inner_join(dust_merge, by = c("lab_number", "field_number"),
-             relationship = "one-to-one")  
+
+merged_dust_quartz <- quartz_merge |> 
+  inner_join(dust_merge, by = c("field_number"),
+             relationship = "one-to-one",
+             suffix = c("_qtz", "_dust"))
+
 
 #checking how many didn't match: 
 quartz_merge|> 
-  anti_join(dust_merge, by = c("lab_number", "field_number")) |> 
+  anti_join(dust_merge, by = c("field_number")) |> 
+  nrow()
+
+dust_merge|> 
+  anti_join(quartz_merge, by = c("field_number")) |> 
   nrow()
 
 nrow(merged_dust_quartz) 
@@ -766,27 +847,37 @@ glimpse(merged_dust_quartz)
 
 
 ``` 
-Ok, looks like we have 1211 observations.   
 
-Let's do a check to make sure that all the lods and durations match up; if so, we can delete one of the columns for both: 
+Let's do a check to make sure that all the durations and dates match up:
 
 ```{r}
-merged_dust_quartz |> 
-  summarise(
-    lod_mismatch      = sum(lod.x != lod.y, na.rm = TRUE),
-    duration_mismatch = sum(duration.x != duration.y, na.rm = TRUE),
-    both_mismatch      = sum(lod.x != lod.y & duration.x != duration.y, na.rm = TRUE),
-    either_mismatch    = sum(lod.x != lod.y | duration.x != duration.y, na.rm = TRUE)
+
+merged_check <- merged_dust_quartz |> 
+  mutate(
+    date_match = as.Date(date_sampled_qtz) == as.Date(date_sampled_dust),
+    dur_match  = (as.numeric(time_qtz) == as.numeric(time_dust))
   )
+
+# Checking that all the dates match
+merged_check |> count(date_match, dur_match)
+
 
 ```
 They are the same! Great news, that means we can retain just one of the variables for each: 
 
 ```{r}
 merged_dust_quartz <-  merged_dust_quartz |> 
-  select(-lod.y, -duration.y) |> 
-  rename(lod = lod.x,
-         duration = duration.x) 
+  select(-lod_dust, -loq_dust, -lab_number_dust, -date_sampled_dust) |> 
+  rename(lod = lod_qtz,
+         loq = loq_qtz,
+         time = time_qtz,
+         date_sampled = date_sampled_qtz, 
+         lab_number = lab_number_qtz)  
+
+#whoops 
+merged_dust_quartz <-  merged_dust_quartz |> 
+  select(-time_dust) 
+
 
 ```
 
@@ -901,14 +992,180 @@ dat |>
 
 combined_dat |> 
   group_by(eighthr) |> 
+  count() 
+
+```
+Ok, all of these started off as mcg/m3 interestingly. We cannot chalk it up to being incorrect measurement classification.  
+
+Let's also check real quick that no observations are duplicates: (ignoring the non-detects, this time)
+
+```{r} 
+combined_dat |> 
+  filter(duplicated(combined_dat) | duplicated(combined_dat, fromLast = TRUE)) |> 
+  arrange(field_number) |> 
+  print(n = Inf) 
+
+
+dup_profile <- combined_dat |> 
+  filter(loq == FALSE) |> 
+  group_by(field_number) |> 
+  filter(n() > 1) |> 
+  summarise(
+    n_rows      = n(),
+    n_results   = n_distinct(silica_conc),
+    n_imis      = n_distinct(imis),
+    n_lab       = n_distinct(lab_number),
+    n_sampling  = n_distinct(sampling_number),
+    n_dates     = n_distinct(date_sampled),
+    n_times     = n_distinct(time),
+    n_lod       = n_distinct(lod),
+    .groups = "drop"
+  ) |> 
+  arrange(desc(n_rows)) 
+print(dup_profile)
+
+
+combined_dat |> 
+  filter(field_number == "00195E") |> 
+  slice(1:2)  
+combined_dat |> 
+  filter(field_number == "00464E") |> 
+  slice(1:2)
+combined_dat |> 
+  filter(field_number == "02653E") |> 
+  slice(1:2)
+combined_dat |> 
+  filter(field_number == "02835E") |> 
+  slice(1:2)
+combined_dat |> 
+  filter(field_number == "02855D") |> 
+  slice(1:2)
+combined_dat |> 
+  filter(field_number == "09710H") |> 
+  slice(1:2)
+
+#how different are they 
+dup_diffs <- combined_dat |> 
+  filter(loq == FALSE) |> 
+  group_by(field_number) |> 
+  filter(n() == 2,            
+         n_distinct(lab_number) == 1) |> 
+  summarise(
+    r_low        = min(silica_conc),
+    r_high       = max(silica_conc),
+    abs_diff     = r_high - r_low,
+    pair_mean    = mean(silica_conc),
+    rel_diff_pct = 100 * abs_diff / pair_mean,
+    any_lod      = any(lod),
+    .groups = "drop"
+  )
+dup_diffs
+ 
+
+#retaining just the 9000 imis in the instances where some observations have everything the same except for that  
+
+duplicate_fields <- dup_profile |> 
+  filter(n_imis == 2) |> 
+  pull(field_number)
+ 
+
+combined_dat2 <- combined_dat |> 
+  filter(!(field_number %in% duplicate_fields & imis == "9010_9130")) 
+
+# How many rows were removed? 
+nrow(combined_dat) - nrow(combined_dat2) 
+
+#how many remain that are duplicates still?
+
+dup_profile2 <- combined_dat2 |> 
+  filter(loq == FALSE) |> 
+  group_by(field_number) |> 
+  filter(n() > 1) |> 
+  summarise(
+    n_rows      = n(),
+    n_results   = n_distinct(silica_conc),
+    n_imis      = n_distinct(imis),
+    n_lab       = n_distinct(lab_number),
+    n_sampling  = n_distinct(sampling_number),
+    n_dates     = n_distinct(date_sampled),
+    n_times     = n_distinct(time),
+    n_lod       = n_distinct(lod),
+    .groups = "drop"
+  ) |> 
+  arrange(desc(n_rows)) 
+print(dup_profile2) 
+
+combined_dat |> 
+  filter(field_number == "06497H") |> 
+  slice(1:2)
+combined_dat |> 
+  filter(field_number == "09237H") |> 
+  slice(1:2)
+combined_dat |> 
+  filter(field_number == "09358H") |> 
+  slice(1:2)
+combined_dat |> 
+  filter(field_number == "09488H") |> 
+  slice(1:2)
+combined_dat |> 
+  filter(field_number == "09710H") |> 
+  slice(1:2)
+
+``` 
+
+Hallelujah: all the remaining duplicates in our data are from 2026. This is something to note for the future: data from 2026 are a MESS. Reporting has not improved. 
+
+
+Let's also double check on our 0 issue from before: 
+
+```{r}
+combined_dat2 |> 
+  filter(loq == FALSE, 
+         silica_conc == 0) |> 
+  count() 
+
+combined_dat2 |> 
+    filter(loq == FALSE, 
+         silica_conc == 0) 
+```
+To be frank, I'm not sure what to do about these. There's only 6 0's, but from an examination of them, I can't figure out what is wrong with the measurements to make this be the result. They are all from the generated data, which means that the respirable dust fraction would have had to have been 0. They aren't below the level of quantification, they aren't non-detects... they did come from earlier on in the study period, so I suppose it is possible that the rigor of reporting/sampling improved.  
+
+Here are the respirable dust observations that was 0 earlier on from data cleaning: X7910
+And for quartz: "0646B" "Y7235" "Y7039" "Y7040" "Y7026" "Y5533" "Z6215" "Z3725" "Z8441" "Z6592" "Z6425" "Z6289" "Z4227"
+[14] "Z3786" "Z3739" "OS-2"  "Z3392" "Z3325" "Y4193" 
+
+Let's see what's present: 
+
+```{r}
+zeros <- c("X7910", "0646B", "Y7235", "Y7039" ,"Y7040" ,"Y7026" ,"Y5533", "Z6215" ,"Z3725", "Z8441" ,"Z6592", "Z6425" ,"Z6289", "Z4227",
+"Z3786", "Z3739" ,"OS-2",  "Z3392" ,"Z3325", "Y4193") 
+
+combined_dat2 |> 
+    filter(loq == FALSE, 
+         silica_conc == 0,
+         field_number %in% zeros) 
+  
+```
+All 6 of these observations correspond to instances where the quartz fraction was 0%. Let's just make note of this for later. 
+
+# Excluding samples from 2026 
+
+```{r}
+combined_dat3 <- combined_dat |> 
+  filter(year < 2026)
+```
+
+
+##How many are non-detects? 
+
+```{r}
+combined_dat3 |> 
+  group_by(loq) |> 
   count()
 ```
-Ok, all of these started off as mcg/m3 interestingly. We cannot chalk it up to being incorrect measurement classification. 
-
-# Excluding samples from 2026
 
 Let's save our analytic dataset: 
 
 ```{r}
-write_csv(combined_dat, "../CleanData/study_dat.csv")
+write_csv(combined_dat3, "../CleanData/study_dat.csv")
 ```

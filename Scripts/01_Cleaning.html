@@ -1593,7 +1593,8 @@ is above or below.</p></li>
 <div id="data-import-and-initial-examination" class="section level2" number="1.1">
 <h2><span class="header-section-number">1.1</span> Data Import and
 Initial Examination</h2>
-<pre class="r"><code>raw_dat &lt;- read_delim(&quot;../RawData/Respirable_Silica_Data.txt&quot;, delim = &quot;|&quot;) 
+<pre class="r"><code>raw_dat &lt;- read_delim(&quot;../RawData/Respirable_Silica_Data.txt&quot;, delim = &quot;|&quot;,
+           col_types = cols(Result = col_character())) 
 glimpse(raw_dat)
 head(raw_dat) 
 tail(raw_dat)</code></pre>
@@ -1652,7 +1653,7 @@ this a function to save time later:</p>
 }
 dat &lt;- clean_osha(raw_dat)  
 
-head(dat)</code></pre>
+head(dat) </code></pre>
 <pre><code>## # A tibble: 6 × 20
 ##   inspection sampling_number establishment       date_sampled eighthr lab_number
 ##        &lt;dbl&gt; &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;   &lt;chr&gt;     
@@ -1666,6 +1667,31 @@ head(dat)</code></pre>
 ## #   air_volume &lt;dbl&gt;, weight &lt;dbl&gt;, imis &lt;dbl&gt;, substance &lt;chr&gt;, result &lt;chr&gt;,
 ## #   uom &lt;fct&gt;, qualifier &lt;chr&gt;, year &lt;dbl&gt;, duration &lt;chr&gt;, lod &lt;lgl&gt;,
 ## #   result_num &lt;dbl&gt;</code></pre>
+<pre class="r"><code>dat |&gt; 
+  filter(result_num == 0) |&gt; 
+  nrow()</code></pre>
+<pre><code>## [1] 858</code></pre>
+<pre class="r"><code>dat |&gt; 
+  filter(result_num == 0) |&gt; 
+  select(result_num) |&gt; 
+  head() </code></pre>
+<pre><code>## # A tibble: 6 × 1
+##   result_num
+##        &lt;dbl&gt;
+## 1          0
+## 2          0
+## 3          0
+## 4          0
+## 5          0
+## 6          0</code></pre>
+<pre class="r"><code>#smallest result? 
+dat |&gt; 
+  filter(result_num != 0) |&gt; 
+  summarise(min_nonzero = min(result_num, na.rm = TRUE))</code></pre>
+<pre><code>## # A tibble: 1 × 1
+##   min_nonzero
+##         &lt;dbl&gt;
+## 1        0.01</code></pre>
 <div id="examination" class="section level3" number="1.1.1">
 <h3><span class="header-section-number">1.1.1</span> Examination</h3>
 <p>Let’s first see how many years our data spans:</p>
@@ -2013,11 +2039,11 @@ samples</h3>
 ## 8 &quot;ND-BLK\t&quot;     3
 ## 9  &lt;NA&gt;        902</code></pre>
 <pre class="r"><code>dat4 &lt;- dat3 |&gt; 
-  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;)))</code></pre>
-<p>We gave removed blank samples (n =1) and samples that were recorded
-as both ND (LOQ) and Blank (n = 368), and those recorded as ND, Blank/t
-(n =3).</p>
-<p>We now have 1470 observations.</p>
+  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND&quot;, &quot;ND\t&quot;)))</code></pre>
+<p>We gave removed blank samples (n =1), samples that were recorded as
+both ND (LOQ) and Blank (n = 368), those recorded as ND, Blank/t (n =3),
+ND samples (n = 463), and those recorded as ND/t (n=3).</p>
+<p>We now have 928 observations.</p>
 </div>
 <div id="no-duplicate-samples" class="section level3" number="1.4.4">
 <h3><span class="header-section-number">1.4.4</span> No duplicate
@@ -2025,7 +2051,7 @@ samples</h3>
 <p>We need to ensure that we don’t have duplicate samples in the
 data.</p>
 <pre class="r"><code>nrow(dat4) #how many rows in data?  </code></pre>
-<pre><code>## [1] 1407</code></pre>
+<pre><code>## [1] 928</code></pre>
 <pre class="r"><code>#look at duplicates 
 dat4_duplicates &lt;- dat4 |&gt;
   group_by(lab_number, field_number, silica_conc, date_sampled) |&gt;
@@ -2042,8 +2068,8 @@ dat4_duplicates |&gt;
 ## 2 F30196     08368D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…        43.9
 ## 3 F30195     01581D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…       214  
 ## 4 F30196     08368D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…        43.9
-## 5 F30067     07870E       2023-11-01   W C CANNIFF AND SONS INC              0  
-## 6 F30067     07870E       2023-11-01   WC CANNIFF AND SONS INC               0</code></pre>
+## 5 F30068     02203E       2023-11-01   WC CANNIFF AND SONS INC             101  
+## 6 F30068     02203E       2023-11-01   W C CANNIFF AND SONS INC            101</code></pre>
 <pre class="r"><code>#all variables 
 dat4_duplicates |&gt;   
   head()</code></pre>
@@ -2054,8 +2080,8 @@ dat4_duplicates |&gt;
 ## 2    1690207 433380          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30196    
 ## 3    1690207 433379          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30195    
 ## 4    1690207 433380          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30196    
-## 5    1694359 433269          W C CANNIFF AND SO… 2023-11-01   Y       F30067    
-## 6    1694359 433269          WC CANNIFF AND SON… 2023-11-01   Y       F30067    
+## 5    1694359 433303          WC CANNIFF AND SON… 2023-11-01   Y       F30068    
+## 6    1694359 433303          W C CANNIFF AND SO… 2023-11-01   Y       F30068    
 ## # ℹ 15 more variables: field_number &lt;chr&gt;, type &lt;fct&gt;, time &lt;dbl&gt;,
 ## #   air_volume &lt;dbl&gt;, weight &lt;dbl&gt;, imis &lt;dbl&gt;, substance &lt;chr&gt;, result &lt;chr&gt;,
 ## #   uom &lt;chr&gt;, qualifier &lt;chr&gt;, year &lt;dbl&gt;, duration &lt;chr&gt;, lod &lt;lgl&gt;,
@@ -2065,7 +2091,8 @@ dat4_duplicates |&gt;
            .keep_all = TRUE) 
 
 nrow(dat4_dedup) #how many rows are left after deleting duplicates? </code></pre>
-<pre><code>## [1] 1308</code></pre>
+<pre><code>## [1] 872</code></pre>
+<p>After removing duplicates, we have 872 observations.</p>
 </div>
 <div id="only-personal-measurements" class="section level3" number="1.4.5">
 <h3><span class="header-section-number">1.4.5</span> Only Personal
@@ -2078,11 +2105,12 @@ Measurements</h3>
 ## # Groups:   type [2]
 ##   type         n
 ##   &lt;fct&gt;    &lt;int&gt;
-## 1 Area         9
-## 2 Personal  1299</code></pre>
+## 1 Area         7
+## 2 Personal   865</code></pre>
 <pre class="r"><code>dat5 &lt;- dat4_dedup |&gt; 
   filter(type == &quot;Personal&quot;)</code></pre>
-<p>We are left with 1,299 observations.</p>
+<p>We are left with 865 observations after removing 7 area
+measurements.</p>
 </div>
 <div id="contains-time-data" class="section level3" number="1.4.6">
 <h3><span class="header-section-number">1.4.6</span> Contains time
@@ -2095,18 +2123,18 @@ data for time.</p>
 <pre><code>## # A tibble: 5 × 2
 ##   duration    `n()`
 ##   &lt;chr&gt;       &lt;int&gt;
-## 1 Long-Term     561
-## 2 Medium-Term   625
-## 3 Short-Term     98
-## 4 Task-Based     10
-## 5 &lt;NA&gt;            5</code></pre>
+## 1 Long-Term     439
+## 2 Medium-Term   372
+## 3 Short-Term     48
+## 4 Task-Based      3
+## 5 &lt;NA&gt;            3</code></pre>
 <pre class="r"><code>dat6 &lt;- dat5 |&gt; 
   filter(!(is.na(duration)))</code></pre>
-<p>5 are missing time data.</p>
-<p>After excluding NAs, we are left with 1,294 measurements.</p>
+<p>3 are missing time data.</p>
+<p>After excluding NAs, we are left with 862 measurements.</p>
 <p>Let’s check and see how many observations we have:</p>
-<pre class="r"><code>glimpse(dat6)</code></pre>
-<pre><code>## Rows: 1,294
+<pre class="r"><code>glimpse(dat6) </code></pre>
+<pre><code>## Rows: 862
 ## Columns: 21
 ## $ inspection      &lt;dbl&gt; 1892548, 1892548, 1892548, 1875265, 1875265, 1887587, …
 ## $ sampling_number &lt;chr&gt; &quot;494572-OIS&quot;, &quot;494575-OIS&quot;, &quot;494578-OIS&quot;, &quot;492231-OIS&quot;…
@@ -2129,6 +2157,11 @@ data for time.</p>
 ## $ lod             &lt;lgl&gt; TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, TRU…
 ## $ result_num      &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9…
 ## $ silica_conc     &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9…</code></pre>
+<p>Quick check for result numeric equal to 0 :</p>
+<pre class="r"><code>dat6 |&gt; 
+  filter(result_num == 0) |&gt; 
+  nrow()</code></pre>
+<pre><code>## [1] 0</code></pre>
 <p>Let’s clean up our data too, only retaining the variables we
 need:</p>
 <pre class="r"><code>dat7 &lt;- dat6 |&gt; 
@@ -2143,7 +2176,8 @@ Import</h1>
 We need to be certain that the samples match with each other (matching
 on “Lab No.”), before multiplying the respirable dust concentration by
 the quartz percentage for corresponding samples.</p>
-<pre class="r"><code>dust_dat &lt;- read_delim(&quot;../RawData/Respirable_Dust_Concentration.txt&quot;, delim = &quot;|&quot;) 
+<pre class="r"><code>dust_dat &lt;- read_delim(&quot;../RawData/Respirable_Dust_Concentration.txt&quot;, delim = &quot;|&quot;,
+           col_types = cols(Result = col_character()))
 glimpse(dust_dat)</code></pre>
 <pre><code>## Rows: 3,893
 ## Columns: 23
@@ -2198,7 +2232,8 @@ glimpse(dust_dat)</code></pre>
 ## #   INSTRUMENT &lt;chr&gt;, LAB_NUMBER &lt;chr&gt;, FIELD_NUMBER &lt;chr&gt;, TYPE &lt;chr&gt;,
 ## #   BLANK &lt;chr&gt;, TIME &lt;dbl&gt;, AIR_VOLUME &lt;dbl&gt;, WEIGHT &lt;dbl&gt;, IMIS &lt;dbl&gt;,
 ## #   SUBSTANCE &lt;chr&gt;, RESULT &lt;chr&gt;, UOM &lt;chr&gt;, QUALIFIER &lt;chr&gt;</code></pre>
-<pre class="r"><code>quartz_dat &lt;- read_delim(&quot;../RawData/Crystalline_Quartz_Fraction.txt&quot;, delim = &quot;|&quot;) 
+<pre class="r"><code>quartz_dat &lt;- read_delim(&quot;../RawData/Crystalline_Quartz_Fraction.txt&quot;, delim = &quot;|&quot;,
+           col_types = cols(Result = col_character()))
 glimpse(quartz_dat)</code></pre>
 <pre><code>## Rows: 4,672
 ## Columns: 23
@@ -2422,10 +2457,39 @@ dust or quartz datasets:</p>
 ## 16 &quot;ND-BLK\t\t\t\t&quot;    21
 ## 17  &lt;NA&gt;             1840</code></pre>
 <pre class="r"><code>dust4 &lt;- dust3 |&gt; 
-  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND-BLK\t\t\t&quot;, &quot;ND-BLK\t\t\t\t&quot;))) 
+  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND-BLK\t\t\t&quot;, &quot;ND-BLK\t\t\t\t&quot;, &quot;ND&quot;, 
+                            &quot;BLK\t\t\t\t&quot;, &quot;BLK\t\t\t\t\t&quot;, &quot;ND\t\t\t\t&quot;, 
+                            &quot;ND\t\t\t\t\t&quot;,&quot;ND-BLK\t\t\t\t&quot;, &quot;ND-BLK\t\t\t\t\t&quot;))) 
 
 quartz4 &lt;- quartz3 |&gt; 
-  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND-BLK\t\t\t&quot;, &quot;ND-BLK\t\t\t\t&quot;)))</code></pre>
+  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND-BLK\t\t\t&quot;, &quot;ND-BLK\t\t\t\t&quot;, &quot;ND&quot;,
+                            &quot;ND\t\t\t&quot;, &quot;ND\t\t\t\t&quot;)))</code></pre>
+<p>From <em>dust</em>, we removed the following iterations of
+<strong>blank samples: </strong></p>
+<ul>
+<li>“BLK” (n = 295)</li>
+<li>“BLK (n=4)</li>
+<li>“BLK (n=5)</li>
+</ul>
+<p>and the following <strong>ND (LOQ) samples:</strong> - “ND” (n=232) -
+“ND (n=3) -”ND (n=8) - “ND-BLK” (n = 506) - “ND-BLK (n=22) -”ND-BLK
+(n=18)</p>
+<p>And from <em>quartz</em>, we removed the following iterations of
+<strong>blank samples: </strong></p>
+<ul>
+<li>“BLK” (n = 12)</li>
+</ul>
+<p>and the following <strong>ND (LOQ) samples:</strong></p>
+<ul>
+<li>“ND” (n = 1227)</li>
+<li>“ND (n=23)</li>
+<li>“ND (n=39)</li>
+<li>“ND-BLK” (n=675)</li>
+<li>“ND-BLK (n=27)</li>
+<li>“ND-BLK (n=21)</li>
+</ul>
+<p>We are now left with 2,540 observations in dust, and 2,153
+observations in quartz.</p>
 </div>
 <div id="no-duplicate-samples-1" class="section level2" number="2.5">
 <h2><span class="header-section-number">2.5</span> No duplicate
@@ -2486,7 +2550,8 @@ dust4_duplicates |&gt;
            .keep_all = TRUE) 
 
 nrow(dust4_dedup) #how many rows are left after deleting duplicates?  </code></pre>
-<pre><code>## [1] 2545</code></pre>
+<pre><code>## [1] 2299</code></pre>
+<p>After removing duplicates, we have 2,299.</p>
 <p>###Quartz</p>
 <p>Next, quartz:</p>
 <pre class="r"><code>#look at duplicates quartz
@@ -2500,14 +2565,14 @@ quartz4_duplicates |&gt;
   select(lab_number, field_number, date_sampled, establishment, quartz_pct) |&gt; 
   head()</code></pre>
 <pre><code>## # A tibble: 6 × 5
-##   lab_number field_number date_sampled establishment               quartz_pct
-##   &lt;chr&gt;      &lt;chr&gt;        &lt;date&gt;       &lt;chr&gt;                            &lt;dbl&gt;
-## 1 L99057     04296E       2017-01-20   ENVIRONMENTAL MATERIALS LLC       0   
-## 2 L99057     04296E       2017-01-20   ENVIRONMENTAL MATERIALS LLC       0   
-## 3 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC          0.21
-## 4 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC          0.21
-## 5 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC             0.19
-## 6 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC             0.19</code></pre>
+##   lab_number field_number date_sampled establishment            quartz_pct
+##   &lt;chr&gt;      &lt;chr&gt;        &lt;date&gt;       &lt;chr&gt;                         &lt;dbl&gt;
+## 1 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC       0.21
+## 2 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC       0.21
+## 3 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC          0.19
+## 4 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC          0.19
+## 5 L99471     09498E       2017-01-30   ABSOLUTE SURFACES LLC          0.25
+## 6 L99471     09498E       2017-01-30   ABSOLUTE SURFACES LLC          0.25</code></pre>
 <pre class="r"><code>#all variables 
 quartz4_duplicates |&gt;   
   arrange(lab_number, field_number, date_sampled, establishment, quartz_pct) |&gt; 
@@ -2515,19 +2580,19 @@ quartz4_duplicates |&gt;
 <pre><code>## # A tibble: 6 × 8
 ##   lab_number date_sampled field_number sampling_number establishment  quartz_pct
 ##   &lt;chr&gt;      &lt;date&gt;       &lt;chr&gt;        &lt;chr&gt;           &lt;chr&gt;               &lt;dbl&gt;
-## 1 L99057     2017-01-20   04296E       260127          ENVIRONMENTAL…       0   
-## 2 L99057     2017-01-20   04296E       260127          ENVIRONMENTAL…       0   
-## 3 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
-## 4 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
-## 5 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
-## 6 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
+## 1 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
+## 2 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
+## 3 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
+## 4 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
+## 5 L99471     2017-01-30   09498E       260821          ABSOLUTE SURF…       0.25
+## 6 L99471     2017-01-30   09498E       260821          ABSOLUTE SURF…       0.25
 ## # ℹ 2 more variables: duration &lt;chr&gt;, lod &lt;lgl&gt;</code></pre>
 <pre class="r"><code>quartz4_dedup &lt;- quartz4|&gt; 
   distinct(lab_number, field_number, quartz_pct, date_sampled, 
            .keep_all = TRUE) 
 
 nrow(quartz4_dedup) #how many rows are left after deleting duplicates? </code></pre>
-<pre><code>## [1] 3351</code></pre>
+<pre><code>## [1] 2093</code></pre>
 <p><strong>NOTE</strong>: when we performed this, we lost some
 information about different spellings of the establishments. This will
 likely come up again as being problematic when we merge with the other
@@ -2547,7 +2612,7 @@ dust_merge &lt;- dust4_dedup |&gt;
   mutate(sampling_number = word(sampling_number, 1, sep = &quot;-&quot;))  
 
 glimpse(dust_merge) </code></pre>
-<pre><code>## Rows: 2,545
+<pre><code>## Rows: 2,299
 ## Columns: 12
 ## $ lab_number      &lt;chr&gt; &quot;65868&quot;, &quot;65871&quot;, &quot;65872&quot;, &quot;64207&quot;, &quot;64209&quot;, &quot;63663&quot;, …
 ## $ date_sampled    &lt;date&gt; 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16, 2026-…
@@ -2562,13 +2627,13 @@ glimpse(dust_merge) </code></pre>
 ## $ duration        &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;L…
 ## $ lod             &lt;lgl&gt; TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, …</code></pre>
 <pre class="r"><code>glimpse(quartz_merge) </code></pre>
-<pre><code>## Rows: 3,351
+<pre><code>## Rows: 2,093
 ## Columns: 5
-## $ lab_number   &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22509&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22392…
-## $ field_number &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03542E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;02839D…
-## $ quartz_pct   &lt;dbl&gt; 0.32, 0.29, 0.00, 0.36, 0.38, 0.00, 0.22, 0.00, 0.23, 0.2…
+## $ lab_number   &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22391&quot;, &quot;S22389…
+## $ field_number &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;03283D&quot;, &quot;03294D…
+## $ quartz_pct   &lt;dbl&gt; 0.320, 0.290, 0.360, 0.380, 0.220, 0.230, 0.240, 0.210, 0…
 ## $ lod          &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, F…
-## $ duration     &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long…</code></pre>
+## $ duration     &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Medi…</code></pre>
 <pre class="r"><code>merged_dust_quartz &lt;- quartz_merge|&gt; 
   inner_join(dust_merge, by = c(&quot;lab_number&quot;, &quot;field_number&quot;),
              relationship = &quot;one-to-one&quot;)  
@@ -2577,28 +2642,28 @@ glimpse(dust_merge) </code></pre>
 quartz_merge|&gt; 
   anti_join(dust_merge, by = c(&quot;lab_number&quot;, &quot;field_number&quot;)) |&gt; 
   nrow()</code></pre>
-<pre><code>## [1] 2140</code></pre>
+<pre><code>## [1] 1458</code></pre>
 <pre class="r"><code>nrow(merged_dust_quartz) </code></pre>
-<pre><code>## [1] 1211</code></pre>
+<pre><code>## [1] 635</code></pre>
 <pre class="r"><code>glimpse(merged_dust_quartz) </code></pre>
-<pre><code>## Rows: 1,211
+<pre><code>## Rows: 635
 ## Columns: 15
-## $ lab_number      &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22509&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22…
-## $ field_number    &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03542E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;028…
-## $ quartz_pct      &lt;dbl&gt; 0.32, 0.29, 0.00, 0.36, 0.38, 0.00, 0.22, 0.00, 0.23, …
+## $ lab_number      &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22391&quot;, &quot;S22…
+## $ field_number    &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;03283D&quot;, &quot;032…
+## $ quartz_pct      &lt;dbl&gt; 0.320, 0.290, 0.360, 0.380, 0.220, 0.230, 0.240, 0.210…
 ## $ lod.x           &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE…
-## $ duration.x      &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;L…
+## $ duration.x      &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;M…
 ## $ date_sampled    &lt;date&gt; 2018-09-26, 2018-09-26, 2018-09-26, 2018-09-26, 2018-…
-## $ sampling_number &lt;chr&gt; &quot;325911&quot;, &quot;325913&quot;, &quot;325915&quot;, &quot;325916&quot;, &quot;325909&quot;, &quot;325…
+## $ sampling_number &lt;chr&gt; &quot;325911&quot;, &quot;325913&quot;, &quot;325916&quot;, &quot;325909&quot;, &quot;325669&quot;, &quot;325…
 ## $ establishment   &lt;chr&gt; &quot;TELLURIDE STONE COMPANY&quot;, &quot;TELLURIDE STONE COMPANY&quot;, …
 ## $ type            &lt;fct&gt; Personal, Personal, Personal, Personal, Personal, Pers…
-## $ eighthr         &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;,…
-## $ time            &lt;dbl&gt; 426, 390, 415, 422, 410, 137, 295, 145, 300, 300, 146,…
-## $ dust_conc       &lt;dbl&gt; 395, 321, 125, 129, 599, 193, 4233, 110, 4237, 1120, 9…
+## $ eighthr         &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;N&quot;,…
+## $ time            &lt;dbl&gt; 426, 390, 422, 410, 295, 300, 300, 146, 145, 295, 514,…
+## $ dust_conc       &lt;dbl&gt; 395, 321, 129, 599, 4233, 4237, 1120, 939, 1290, 4321,…
 ## $ dust_uom        &lt;chr&gt; &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg…
-## $ duration.y      &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;L…
+## $ duration.y      &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;M…
 ## $ lod.y           &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE…</code></pre>
-<p>Ok, looks like we have 1211 observations.</p>
+<p>Ok, looks like we have 635 observations.</p>
 <p>Let’s do a check to make sure that all the lods and durations match
 up; if so, we can delete one of the columns for both:</p>
 <pre class="r"><code>merged_dust_quartz |&gt; 
@@ -2629,28 +2694,27 @@ merged_dust_quartz2 |&gt;
 <pre><code>## # A tibble: 1 × 2
 ##    mean    sd
 ##   &lt;dbl&gt; &lt;dbl&gt;
-## 1  138.  498.</code></pre>
+## 1  263.  664.</code></pre>
 <pre class="r"><code>#by year: 
 merged_dust_quartz2 |&gt; 
   group_by(year) |&gt; 
   summarize(mean = mean(silica_conc),sd = sd(silica_conc)) </code></pre>
-<pre><code>## # A tibble: 14 × 3
-##     year  mean     sd
-##    &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt;
-##  1  2004   0      0  
-##  2  2006  67.2  150. 
-##  3  2007 713.  1521. 
-##  4  2008  20.6   29.8
-##  5  2009  62.1  175. 
-##  6  2010 307.   809. 
-##  7  2011  89.1  235. 
-##  8  2012 148.   474. 
-##  9  2013 202.   803. 
-## 10  2014  82.3  187. 
-## 11  2015  85.2  174. 
-## 12  2016 145.   588. 
-## 13  2017  76.2  141. 
-## 14  2018 169.   364.</code></pre>
+<pre><code>## # A tibble: 13 × 3
+##     year   mean     sd
+##    &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;
+##  1  2006  112.   194. 
+##  2  2007 1010.  1743. 
+##  3  2008   51.5   19.4
+##  4  2009  213.   283. 
+##  5  2010  577.  1043. 
+##  6  2011  170.   304. 
+##  7  2012  303.   644. 
+##  8  2013  428.  1131. 
+##  9  2014  163.   238. 
+## 10  2015  161.   213. 
+## 11  2016  255.   764. 
+## 12  2017  128.   163. 
+## 13  2018  325.   455.</code></pre>
 <p>##Personal Measures</p>
 <p>We need to ensure that we are only retaining measurements that are
 personal:</p>
@@ -2661,8 +2725,8 @@ personal:</p>
 ## # Groups:   type [2]
 ##   type         n
 ##   &lt;fct&gt;    &lt;int&gt;
-## 1 Area         6
-## 2 Personal  1205</code></pre>
+## 1 Area         4
+## 2 Personal   631</code></pre>
 <pre class="r"><code>merged_dust_quartz3 &lt;- merged_dust_quartz2|&gt; 
   filter(type == &quot;Personal&quot;)</code></pre>
 </div>
@@ -2672,18 +2736,17 @@ data</h2>
 <pre class="r"><code>merged_dust_quartz3 |&gt; 
   group_by(duration) |&gt; 
   summarise(n()) </code></pre>
-<pre><code>## # A tibble: 5 × 2
+<pre><code>## # A tibble: 4 × 2
 ##   duration    `n()`
 ##   &lt;chr&gt;       &lt;int&gt;
-## 1 Long-Term     476
-## 2 Medium-Term   582
-## 3 Short-Term    128
-## 4 Task-Based     16
-## 5 &lt;NA&gt;            3</code></pre>
+## 1 Long-Term     290
+## 2 Medium-Term   301
+## 3 Short-Term     34
+## 4 Task-Based      6</code></pre>
 <pre class="r"><code>merged_dust_quartz4 &lt;- merged_dust_quartz3|&gt; 
  filter(!(is.na(duration)))
 nrow(merged_dust_quartz4)</code></pre>
-<pre><code>## [1] 1202</code></pre>
+<pre><code>## [1] 631</code></pre>
 </div>
 </div>
 <div id="merge-respirable-and-calculated-data" class="section level1" number="3">
@@ -2703,9 +2766,9 @@ dat7 &lt;- dat7 |&gt;
   mutate(imis = as.character(imis))</code></pre>
 <pre class="r"><code>combined_dat &lt;- bind_rows(dat7, merged_dust_quartz5)
 nrow(combined_dat) </code></pre>
-<pre><code>## [1] 2496</code></pre>
-<pre class="r"><code>glimpse(combined_dat)</code></pre>
-<pre><code>## Rows: 2,496
+<pre><code>## [1] 1493</code></pre>
+<pre class="r"><code>glimpse(combined_dat) </code></pre>
+<pre><code>## Rows: 1,493
 ## Columns: 13
 ## $ sampling_number &lt;chr&gt; &quot;494572-OIS&quot;, &quot;494575-OIS&quot;, &quot;494578-OIS&quot;, &quot;492231-OIS&quot;…
 ## $ establishment   &lt;chr&gt; &quot;DELPHOS GRANITE WORKS INC&quot;, &quot;DELPHOS GRANITE WORKS IN…
@@ -2720,12 +2783,19 @@ nrow(combined_dat) </code></pre>
 ## $ lod             &lt;lgl&gt; TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, TRU…
 ## $ type            &lt;fct&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…
 ## $ eighthr         &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(silica_conc == 0) |&gt; 
+  count(imis)</code></pre>
+<pre><code>## # A tibble: 1 × 2
+##   imis          n
+##   &lt;chr&gt;     &lt;int&gt;
+## 1 9010_9130     6</code></pre>
 <p>#Data check</p>
 <p>We want to see how many observations we have per year, as well as
 check for potential outliers:</p>
 <pre class="r"><code>summary(combined_dat$silica_conc)</code></pre>
 <pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-##    0.00    0.00   20.95  119.11   77.85 7372.80</code></pre>
+##     0.0    26.7    58.4   199.1   155.6  7372.8</code></pre>
 <pre class="r"><code>Q1 &lt;- quantile(combined_dat$silica_conc, 0.25, na.rm = TRUE)
 Q3 &lt;- quantile(combined_dat$silica_conc, 0.75, na.rm = TRUE)
 IQR_value &lt;- IQR(combined_dat$silica_conc, na.rm = TRUE)
@@ -2735,28 +2805,28 @@ upper_bound &lt;- Q3 + 1.5 * IQR_value
 
 lower_bound</code></pre>
 <pre><code>##      25% 
-## -116.775</code></pre>
+## -166.602</code></pre>
 <pre class="r"><code>upper_bound </code></pre>
-<pre><code>##     75% 
-## 194.625</code></pre>
+<pre><code>##    75% 
+## 348.87</code></pre>
 <pre class="r"><code>outliers &lt;- combined_dat |&gt; 
   filter(silica_conc &lt; lower_bound | silica_conc &gt; upper_bound)
 
 outliers </code></pre>
-<pre><code>## # A tibble: 302 × 13
+<pre><code>## # A tibble: 162 × 13
 ##    sampling_number establishment      date_sampled lab_number field_number  time
 ##    &lt;chr&gt;           &lt;chr&gt;              &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
-##  1 492231-OIS      CELTIC STONE GRAN… 2026-04-16   64207      04715D         390
-##  2 492232-OIS      CELTIC STONE GRAN… 2026-04-16   64209      01043H         390
-##  3 492098-OIS      TNT SERVICES CORP  2026-04-14   63665      09352H         278
-##  4 491870-OIS      REVIVAL STONE AND… 2026-04-09   63184      06873H         442
-##  5 490584-OIS      PINTER MEMORIALS … 2026-03-23   62026      06521H         268
-##  6 489132-OIS      BURTON MONUMENT C… 2026-03-03   60470      NJ-1           249
-##  7 487773-OIS      GRANITE MASTERS O… 2026-02-11   59210      02970H         353
-##  8 485532-OIS      JONES STONE AND M… 2026-01-07   57566      00956D         373
-##  9 484848-OIS      BAY AREA GRANITE … 2025-12-17   56952      08000H          14
-## 10 484900-OIS      GRANITE USA        2025-12-17   56967      5B2            225
-## # ℹ 292 more rows
+##  1 490584-OIS      PINTER MEMORIALS … 2026-03-23   62026      06521H         268
+##  2 487773-OIS      GRANITE MASTERS O… 2026-02-11   59210      02970H         353
+##  3 484848-OIS      BAY AREA GRANITE … 2025-12-17   56952      08000H          14
+##  4 475703-OIS      ABSOLUTE STONE AN… 2025-07-01   51034      MCY05861H      265
+##  5 472408-OIS      GLOBAL GRANITE LLC 2025-04-28   48511      07523H         390
+##  6 470109-OIS      GRANIX INC         2025-04-08   19420      07472E         440
+##  7 470130-OIS      GRANIX INC         2025-04-08   19435      07093E          15
+##  8 465125          MILESTONE NEW GEN… 2025-01-30   F53746     05771D #B      221
+##  9 465190          MILESTONE NEW GEN… 2025-01-30   F53747     04432H #A      188
+## 10 459859          GT STONE GRANITE … 2024-10-25   F51746     03663H         100
+## # ℹ 152 more rows
 ## # ℹ 7 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
 ## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
 <pre class="r"><code>combined_dat |&gt; 
@@ -2792,9 +2862,9 @@ outlier_field_no </code></pre>
 ## # Groups:   eighthr [3]
 ##   eighthr     n
 ##   &lt;chr&gt;   &lt;int&gt;
-## 1 N        1030
-## 2 Y         172
-## 3 &lt;NA&gt;     1294</code></pre>
+## 1 N         546
+## 2 Y          85
+## 3 &lt;NA&gt;      862</code></pre>
 <p>Ok, all of these started off as mcg/m3 interestingly. We cannot chalk
 it up to being incorrect measurement classification.</p>
 </div>

@@ -116,7 +116,7 @@ study_dat |>
   )
 ```
 
-We have the most observations in 2024. We are also missing data for the year 2005.  
+We have the most observations in 2024.
 
 
 ```{r}
@@ -412,27 +412,14 @@ Let's start fitting our time series model to this data. We will start with a sim
 mod_linear_reg <- glm(silica_conc ~ year, data = study_dat) 
 summary(mod_linear_reg)
 ```
- 
-That gave us the trend when year is a character variable. Since we are missing 2005, we may need to initalize our data at year 2005. Then we can create a year counter for the year in the study, and estimate a numeric result: 
-
-### Year Counter Creaqtion
-
-```{r}
-dat_clean <- study_dat |>  
-  mutate(year = as.numeric(as.character(year))) |>  
-  arrange(year) |>
-  mutate(year_counter = dense_rank(year) - 1) 
-
-dat_clean |> 
-  distinct(year, year_counter) |> 
-  arrange(year)
-``` 
 
 ## Linear Model
 
-Let's try our glm again: 
-```{r}
-mod_linear_reg <- glm(silica_conc ~ year_counter, data = dat_clean)
+Let's try our glm again, this time, with year as numeric : 
+```{r} 
+
+
+mod_linear_reg <- glm(silica_conc ~ year, data = dat_clean)
 summary(mod_linear_reg) 
 extract_eq(mod_linear_reg)
 ```
