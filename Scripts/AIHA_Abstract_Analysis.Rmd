@@ -518,7 +518,7 @@ Let's log-transform and check again:
 study_dat <- study_dat |> 
   mutate(log_conc = log(silica_conc)) 
 
-qqnorm(study_dat$log_conc) 
+
 hist(study_dat$log_conc)
 shapiro.test(study_dat$log_conc)
 
