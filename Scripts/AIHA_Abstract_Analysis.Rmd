@@ -598,7 +598,7 @@ What if we instead investigate a logistic model that investigates whether the nu
 
 
 
-mod_logistic  <- glm(over_PEL~year_counter, data = dat_clean, 
+mod_logistic  <- glm(over_PEL~as.numeric(year), data = no_zeros_dat, 
                      family = binomial)
 summary(mod_logistic) 
 extract_eq(mod_logistic)
