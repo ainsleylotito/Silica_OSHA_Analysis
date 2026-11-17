@@ -51,12 +51,44 @@ I.E., what dates/years are covered by the time series data?
 range(study_dat$date_sampled)
 ```
 
-Quickly, let's look at those 0s: 
+### Detected Data 
+
+
+```{r} 
+study_dat |> 
+  filter(loq == FALSE) |> 
+  summarize(min(date_sampled), max(date_sampled))
+
+``` 
+
+Among our *detected* measurements, we have samples ranging from 11/14/2006 to 12/30/2025. 
+
+### Non-Detects 
 
 ```{r}
 study_dat |> 
+  filter(loq == TRUE) |> 
+  summarize(min(date_sampled), max(date_sampled))
+```
+
+Among our *non-detect* samples, we have samples ranging from 2/23/2004 to 3/05/2025.
+
+Quickly, let's look at those 0s: 
+
+```{r}
+
+study_dat |> 
+  filter(silica_conc == 0) |> 
+  count()
+
+study_dat |> 
   filter(silica_conc == 0) |> 
   group_by(lod) |> 
+  summarize(n())
+
+study_dat |> 
+  filter(silica_conc == 0) |> 
+  group_by(loq) |> 
   summarize(n())
 
 study_dat |> 
@@ -64,7 +96,10 @@ study_dat |>
   summarise(min_nonzero = min(silica_conc, na.rm = TRUE))
 ```
 
-We have data spanning Feb of 2004 to May of 2026. 
+We have 1,009 observations where our silica concentration is 0, and 1,003 of them correspond to the observations that are below the limit of detection. 
+
+We have 6 problematic ones, but we know from investigating in the data that these observations corresponded to instances where the quartz fraction was 0%.
+
 
 How do eighthr ones look in terms of time? 
 

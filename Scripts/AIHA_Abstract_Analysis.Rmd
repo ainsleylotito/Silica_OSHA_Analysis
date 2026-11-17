@@ -58,6 +58,15 @@ We excluded 92 observations.
 How many observations? 
 ```{r}
 nrow(study_dat)
+``` 
+
+How many are detect vs. non-detect? 
+
+```{r}
+study_dat |> 
+count(loq) |> 
+  mutate(pct = n / sum(n) * 100)
+
 ```
 
 ## Study Period 
@@ -67,11 +76,103 @@ I.E., what dates/years are covered by the time series data?
 ```{r}
 range(study_dat$date_sampled)
 ```
+
+### Detected Data 
+
+
+```{r} 
+study_dat |> 
+  filter(loq == FALSE) |> 
+  summarize(min(date_sampled), max(date_sampled)) 
+
+``` 
+
+Among our *detected* measurements, we have samples ranging from 11/14/2006 to 12/30/2025.  
+
+What month had the most detects? 
+
+```{r}
+study_dat |> 
+  filter(loq == FALSE) |> 
+  group_by(year) |> 
+  count() |> 
+  arrange(desc(n))
+```
+
+### Non-Detects 
+
+```{r}
+study_dat |> 
+  filter(loq == TRUE) |> 
+  summarize(min(date_sampled), max(date_sampled))
+```
+
+Among our *non-detect* samples, we have samples ranging from 2/23/2004 to 3/05/2025.   
+
+
+
+# Subsetting datasets 
+
+We are now going to make some new datasets, one which contains just our non-detect measurements, one with our detected measurements, and one that has both. 
+
+```{r}
+all_data <- study_dat  
+nrow(all_data)
+
+non_detects <- study_dat |> 
+  filter(loq == TRUE) 
+nrow(non_detects)
+
+study_dat <- study_dat |> 
+  filter(loq == FALSE) 
+nrow(study_dat)
+
+```
   
+# Non-Detect examination  
+
+Min and max number per year: 
+
+```{r}
+non_detects |> 
+  group_by(year) |> 
+  summarize(n = n()) |> 
+  arrange(desc(n))
+```
+
+How many non-detects relative to detects per year?
+
+```{r}
+all_data |> 
+  group_by(year) |> 
+count(loq) |> 
+  mutate(pct = n / sum(n) * 100)
+```
+  
+  Plotting this: 
+  
+```{r}
+  loq_summary <- all_data |> 
+  group_by(year) |> 
+  count(loq) |> 
+  mutate(pct = n / sum(n) * 100) |> 
+  ungroup()
+
+
+ggplot(loq_summary, aes(x = factor(year), y = pct, fill = loq)) +
+  geom_col() +
+  geom_text(aes(label = paste0(round(pct), "%")),
+            position = position_stack(vjust = 0.5), size = 3) +
+  labs(x = "Year", y = "Percent of samples", fill = "Non-Detect Sample")
+```
+Just eyeballing this, it looks like there could be a significant trend in decreased percent of non-detect samples relative to all samples taken year by year. That could be an interesting model option to investigate further down in the temporal trend section.  
+  
+
   
 ## How many samples per year? 
 
-```{r}
+```{r} 
+#reported
 study_dat |> 
   group_by(year) |> 
   summarize(n_year = n()) |> 
@@ -82,9 +183,75 @@ study_dat |>
 
 study_dat |> 
   group_by(year) |> 
+  summarize(n_year = n())  
+
+#all measurements 
+all_data |> 
+  group_by(year) |> 
   summarize(n_year = n()) 
   
+``` 
+
+## Plotting number of samples per year 
+
+```{r}
+samples_per_year <- all_data |> 
+ group_by(year) |> 
+  summarize(n_year = n()) |> 
+  mutate(year = as.numeric(as.character(year)))
+
+
+fig1 <- ggplot(samples_per_year, aes(x =as.numeric(year), y = n_year)) + 
+  geom_point()+
+  geom_line()+
+  labs(x = "Year", y = "Number of samples")+ 
+  scale_x_continuous(breaks = seq(min(samples_per_year$year), max(samples_per_year$year), 1)) +
+   theme_classic()+
+  
+  theme(plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1))  
+
+print(fig1)
+
+ggsave("../Output/samples_per_year.png", fig1, 
+       width = 6, 
+       height = 4)
 ```
+ 
+ Note that we are missing data for the year 2005! 
+ 
+## Annual plot with LOQ 
+
+```{r}
+samples_by_loq <- all_data |> 
+  count(year, loq) |> 
+  mutate(year = as.numeric(as.character(year)),
+         loq = if_else(loq, "Non-Detect", "Detected Concentration"))
+
+fig2 <- ggplot(samples_by_loq, aes(x = year, y = n, color = loq)) + 
+  geom_point() +
+  geom_line() +
+  scale_x_continuous(breaks = seq(min(samples_by_loq$year), max(samples_by_loq$year), 1)) + 
+  scale_y_continuous(breaks = seq(0, 300, 50)) +
+  labs(x = "Year", y = "Number of samples", color = "Non-Detect Status") + 
+  theme_classic() +
+  theme(
+    plot.subtitle = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.title = element_text(size = 9),
+    legend.text  = element_text(size = 8),
+    legend.key.size = unit(0.4, "cm")
+  )
+
+print(fig2)
+
+ggsave("../Output/samples_per_year_and_LOQ.png", fig2, 
+       width = 8, 
+       height = 4)
+```
+ 
+
  
 ## Duration 
 
@@ -124,34 +291,8 @@ study_dat |>
     pct_zero = round((100 * n_zeros / n_total),1)
   ) 
 
-
-study_dat |> 
-  mutate(zero = silica_conc == 0) |> 
-  summarize(
-    n_total  = n(), 
-    n_zeros= sum(zero), 
-    pct_zero = round((100 * n_zeros / n_total),1)
-  )
 ``` 
 
- 
-## LOD  
-
-How many observations were LOD? By duration?  
-
-```{r}
-study_dat |> 
-  group_by(lod) |> 
-  count() 
-
-#percentage 
-(74/2330)*100 
-
-#by duration 
-study_dat |> 
-  group_by(duration,lod) |> 
-  count() 
-``` 
 
 ## Over PEL  
 
@@ -193,7 +334,7 @@ plot_dat <- study_dat %>%
                          labels = c("Reported Measurement", "Below LOD"))
   ) 
 
-ggplot(plot_dat, aes(x = duration, y = silica_conc, shape = lod_status, color = lod_status)) +
+al_pel_plot <- ggplot(plot_dat, aes(x = duration, y = silica_conc, shape = lod_status, color = lod_status)) +
   
   # Reported Measurement: drawn first (bottom layer), semi-transparent
   geom_jitter(
@@ -235,7 +376,6 @@ ggplot(plot_dat, aes(x = duration, y = silica_conc, shape = lod_status, color = 
     linetype = guide_legend(override.aes = list(colour = c("#ff7f0e", "#d62728")))
   ) +
   labs(
-    title = "Respirable Crystalline Silica Concentration by Sample Duration Category",
     x = NULL,
     y = "RCS Concentration (µg/m³) [Log10 Scale]"
   ) +
@@ -247,7 +387,11 @@ ggplot(plot_dat, aes(x = duration, y = silica_conc, shape = lod_status, color = 
     legend.key.size = unit(0.3, "cm"),
      legend.text = element_text(size = 8),
     legend.title = element_text(size = 9)
-  )
+  ) 
+
+print(al_pel_plot)
+
+ggsave("../Output/duration_concentration_plot.png", al_pel_plot)
 ``` 
 
 
@@ -262,10 +406,9 @@ over_PEL <- study_dat |>
   summarize(annual_pct_over_pel = round(mean(over_PEL == "TRUE")*100, 2))
 
 over_PEL 
-ggplot(over_PEL, aes(year, annual_pct_over_pel))+
+PEL_plot <-  ggplot(over_PEL, aes(year, annual_pct_over_pel))+
   geom_col()+ 
-  labs(x = "Year", y = "Percentage of Measurements Exceeding 50 mcg/m³ (%)")+
-  ggtitle("Percentage of OSHA Respirable Silica Concentration Measurements\n Exceeding the PEL", subtitle = "By Year" )+ 
+  labs(x = "Year", y = "Percentage of Measurements Exceeding 50 mcg/m³ (%)") + 
   
  geom_text(aes(label = paste0(annual_pct_over_pel, "%"), vjust = -0.5), size = 2.5)+  
   
@@ -273,7 +416,12 @@ ggplot(over_PEL, aes(year, annual_pct_over_pel))+
   
   theme(plot.title = element_text(hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5), 
-    axis.text.x = element_text(angle = 45, hjust = 1))
+    axis.text.x = element_text(angle = 45, hjust = 1))  
+
+print(PEL_plot)
+
+ggsave("../Output/overPEL_plot.png", PEL_plot, 
+       width = 8, height = 5)
 ```
 
 What about Over PEL by Duration?? 
@@ -284,11 +432,10 @@ over_PEL_duration <- study_dat |>
   summarize(annual_pct_over_pel = round(mean(over_PEL == "TRUE")*100, 2))
 
 over_PEL_duration 
-ggplot(over_PEL_duration, aes(year, annual_pct_over_pel))+ 
+over_PEL_duration_plot <- ggplot(over_PEL_duration, aes(year, annual_pct_over_pel))+ 
   facet_wrap(~duration)+
   geom_col()+ 
-  labs(x = "Year", y = "Percentage of Measurements Exceeding 50 mcg/m³ (%)")+
-  ggtitle("Percentage of OSHA Respirable Silica Concentration Measurements\n Exceeding the PEL", subtitle = "By Year and Duration" )+ 
+  labs(x = "Year", y = "Percentage of Measurements Exceeding 50 mcg/m³ (%)")+ 
   
  geom_text(aes(label = paste0(annual_pct_over_pel, "%"), vjust = -0.5), size = 2)+  
   
@@ -296,11 +443,47 @@ ggplot(over_PEL_duration, aes(year, annual_pct_over_pel))+
   
   theme(plot.title = element_text(hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5), 
-    axis.text.x = element_text(angle = 45, hjust = 1))
+    axis.text.x = element_text(angle = 45, hjust = 1)) 
+ 
+print(over_PEL_duration_plot)
+ggsave("../Output/overPEL_duration_plot.png", over_PEL_duration_plot, 
+       width = 12, height = 8.5)
 ```
 
 
-# Temporal Trends 
+# Temporal Trends  
+
+## LOQ trends over time  
+
+I'm interested to see if the percentage of non-detects relative to all samples taken changed significantly over the study period. 
+
+```{r}
+loq_summary <- all_data |> 
+  group_by(year) |> 
+  count(loq) |> 
+  mutate(pct = n / sum(n) * 100) |> 
+  ungroup() |> 
+  filter(loq == TRUE)
+
+loq_dat_clean <- loq_summary |>  
+  mutate(year = as.numeric(as.character(year))) |>  
+  arrange(year) |>
+  mutate(year_counter = dense_rank(year) - 1) 
+
+loq_dat_clean |> 
+  distinct(year, year_counter) |> 
+  arrange(year)  
+
+head(loq_dat_clean)
+
+
+loq_mod <- lm(pct~ year_counter, data = loq_dat_clean) 
+
+summary(loq_mod)  
+
+confint(loq_mod)
+
+```
 
 ## Median concentration reported per year 
 
@@ -311,23 +494,36 @@ Do we have all of the years covered by this data?
 ```{r}
 study_dat |> 
   select(year) |> 
-  unique()
+  unique() 
+
+levels(study_dat$year) 
+
+study_dat |> 
+  filter(year == 2004)
 ``` 
 
-We are missing data for the year 2005. We will also have to do the year counter process.
+We're good!
 
-## Year Counter Creaqtion
+###Checks for normality 
 
 ```{r}
-dat_clean <- study_dat |>  
-  mutate(year = as.numeric(as.character(year))) |>  
-  arrange(year) |>
-  mutate(year_counter = dense_rank(year) - 1) 
+qqnorm(study_dat$silica_conc) 
+hist(study_dat$silica_conc)
+shapiro.test(study_dat$silica_conc)
+```
 
-dat_clean |> 
-  distinct(year, year_counter) |> 
-  arrange(year)
-``` 
+Let's log-transform and check again: 
+
+```{r}
+study_dat <- study_dat |> 
+  mutate(log_conc = log(silica_conc)) 
+
+qqnorm(study_dat$log_conc) 
+hist(study_dat$log_conc)
+shapiro.test(study_dat$log_conc)
+
+```
+
 
 ## Crude mod:  
 
@@ -339,32 +535,37 @@ How many zeroes were censored??
 
 ```{r}
 study_dat |> 
-  group_by(lod) |> 
   filter(silica_conc == 0) |> 
   count() 
-
 
 study_dat |> 
   filter(silica_conc == 0) |>  
   group_by(imis) |> 
   count()
  
-no_zeros_dat <- dat_clean |> 
+no_zeros_dat <- study_dat|> 
   filter(silica_conc != 0) 
 
-no_zeros_dat |> 
-  distinct(year, year_counter) |> 
-  arrange(year)
+
 ```
 
 ```{r}
-mod_median_trend <- lm(log_conc ~ year_counter, data = no_zeros_dat) 
+mod_median_trend <- lm(log_conc ~ as.numeric(year), data = no_zeros_dat) 
 
 summary(mod_median_trend) 
 
-exp(coef(mod_median_trend)) 
+exp(coef(mod_median_trend))  
 
+ci_log <- cbind(estimate = coef(mod_median_trend), confint(mod_median_trend))
+ci_ratio <- exp(ci_log)
+ci_ratio
 
+round((ci_ratio[2, ] - 1) * 100, 1) 
+
+coeftest(mod_median_trend,
+         vcov = vcovCL(mod_median_trend,
+                       cluster = ~ establishment,
+                       type = "HC1")) 
 ```
 There is a statistically significant relationship here whereby the median concentration increases by 1.3 units for each additional year in the study period.  
 
@@ -374,16 +575,12 @@ There is a statistically significant relationship here whereby the median concen
 Get the median by year and duration:
 
 ```{r}
-median_by_year_and_duration <- dat_clean |> 
-  group_by(year_counter,duration) |> 
-  summarize(median_conc = median(silica_conc, na.rm = TRUE))  
+median_by_year_and_duration <- no_zeros_dat|> 
+  group_by(year,duration) |>
+  mutate(log_conc = log(silica_conc))
 
-ggplot(data=median_by_year_and_duration,aes(year_counter,median_conc))+  
-  facet_wrap(~duration)+
-  geom_point()+
-  geom_line()
 
-mod_median_trend2 <- lm(median_conc ~ year_counter*duration, data = median_by_year_and_duration)
+mod_median_trend2 <- lm(log_conc ~ as.numeric(year)*duration, data = median_by_year_and_duration)
 summary(mod_median_trend2)
 ```
 
@@ -392,49 +589,6 @@ There is no significant trend when we differentiate by duration.
 
 
 # All measurements 
-
-## Linear Model
-
-Let's try our glm again, this time with the pure silica conc instead of median concentration: 
-```{r}
-mod_linear_reg <- glm(silica_conc ~ year_counter, data = dat_clean)
-summary(mod_linear_reg) 
-extract_eq(mod_linear_reg)
-```
-
-
-### By Duration 
-
-This time, let's see whether duration interacts with this relationship: 
-
-```{r}
-mod_linear_reg2 <- glm(silica_conc ~ year_counter * duration, data = dat_clean)
-summary(mod_linear_reg2) 
-extract_eq(mod_linear_reg2)
-```
-This time it appears that as years increase the concentration goes down, but when it is task based the conc. intercept increases... 
-
-Let's plot what the model is showing us: 
-
-```{r}
-# Generate predictions from the model across the range of year_counter for each duration
-pred_grid <- dat_clean |> 
-  distinct(duration) |> 
-  tidyr::crossing(year_counter = seq(min(dat_clean$year_counter, na.rm = TRUE), 
-                                       max(dat_clean$year_counter, na.rm = TRUE), 
-                                       length.out = 100))
-
-pred_grid$predicted <- predict(mod_linear_reg2 , newdata = pred_grid)
-
-ggplot() +
-  geom_point(data = dat_clean, aes(x = year_counter, y = silica_conc, color = duration), alpha = 0.3) +
-  geom_line(data = pred_grid, aes(x = year_counter, y = predicted, color = duration), linewidth = 1.2) +
-  facet_wrap(~ duration, scales = "free_y") +
-  theme_minimal() +
-  theme(legend.position = "none")
-
-```
-
 
 ### Over PEL
 

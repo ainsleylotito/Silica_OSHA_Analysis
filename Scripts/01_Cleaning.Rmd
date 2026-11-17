@@ -1161,8 +1161,15 @@ combined_dat3 <- combined_dat |>
 ```{r}
 combined_dat3 |> 
   group_by(loq) |> 
-  count()
+  count() 
 ```
+We don't need the "type" variable, we can get rid of it: 
+
+```{r}
+combined_dat3 <- combined_dat3 |> 
+  select(-type)
+```
+
 
 Let's save our analytic dataset: 
 
