@@ -114,59 +114,16 @@
 \setcounter{tocdepth}{3}
 \tableofcontents
 }
-\begin{Shaded}
-\begin{Highlighting}[]
-\CommentTok{\# Load packages}
-\FunctionTok{library}\NormalTok{(tidyverse)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## -- Attaching core tidyverse packages ------------------------ tidyverse 2.0.0 --
-## v dplyr     1.2.1     v readr     2.2.0
-## v forcats   1.0.1     v stringr   1.6.0
-## v ggplot2   4.0.3     v tibble    3.3.1
-## v lubridate 1.9.5     v tidyr     1.3.2
-## v purrr     1.2.2     
-## -- Conflicts ------------------------------------------ tidyverse_conflicts() --
-## x dplyr::filter() masks stats::filter()
-## x dplyr::lag()    masks stats::lag()
-## i Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\FunctionTok{library}\NormalTok{(ggplot2) }
-\FunctionTok{library}\NormalTok{(readxl) }
-\FunctionTok{library}\NormalTok{(lubridate)}
-\FunctionTok{library}\NormalTok{(janitor)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## 
-## Attaching package: 'janitor'
-## 
-## The following objects are masked from 'package:stats':
-## 
-##     chisq.test, fisher.test
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\CommentTok{\# Global options}
-\NormalTok{knitr}\SpecialCharTok{::}\NormalTok{opts\_chunk}\SpecialCharTok{$}\FunctionTok{set}\NormalTok{(}\AttributeTok{echo =} \ConstantTok{TRUE}\NormalTok{, }\AttributeTok{warning =} \ConstantTok{FALSE}\NormalTok{, }\AttributeTok{message =} \ConstantTok{FALSE}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
-
 \section{Introduction}\label{introduction}
 
 This script will contain the code necessary to clean the data stored in
 the \texttt{/RawData} folder.
 
 To start it will focus on only cleaning data puled pertaining to the
-9000 IMIS classification; later on, subsequent datasets may be cleaned,
-merged, and analyzed.
+9000 IMIS classification; then it will generate the samples pertaining
+to 9130 (respirable dust concentration) and 9010 (crystalline quartz
+fraction {[}\%{]}) to calculate silica concentrations for years prior to
+the classification of 9000.
 
 New variables created during the cleaning process, as well as a
 description of all other included variables, are contained within the
@@ -185,15 +142,18 @@ excel file \texttt{DataDictionary.xlsx}.
   above or below.
 \end{enumerate}
 
-\section{Data Import and Initial
+\section{IMIS 9000 data}\label{imis-9000-data}
+
+\subsection{Data Import and Initial
 Examination}\label{data-import-and-initial-examination}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{dat }\OtherTok{\textless{}{-}} \FunctionTok{read\_delim}\NormalTok{(}\StringTok{"../RawData/Respirable\_Silica\_Data.txt"}\NormalTok{, }\AttributeTok{delim =} \StringTok{"|"}\NormalTok{) }
-\FunctionTok{glimpse}\NormalTok{(dat)}
-\FunctionTok{head}\NormalTok{(dat) }
-\FunctionTok{tail}\NormalTok{(dat)}
+\NormalTok{raw\_dat }\OtherTok{\textless{}{-}} \FunctionTok{read\_delim}\NormalTok{(}\StringTok{"../RawData/Respirable\_Silica\_Data.txt"}\NormalTok{, }\AttributeTok{delim =} \StringTok{"|"}\NormalTok{,}
+           \AttributeTok{col\_types =} \FunctionTok{cols}\NormalTok{(}\AttributeTok{Result =} \FunctionTok{col\_character}\NormalTok{())) }
+\FunctionTok{glimpse}\NormalTok{(raw\_dat)}
+\FunctionTok{head}\NormalTok{(raw\_dat) }
+\FunctionTok{tail}\NormalTok{(raw\_dat)}
 \end{Highlighting}
 \end{Shaded}
 
@@ -220,98 +180,152 @@ of hours instead of minutes. Adding indicator in case of data being
 analysis of some kind or just have the knowledge that they were less
 than that number.
 
-To start, let's simply apply some reformats to our data:
+To start, let's simply apply some reformats to our data. We will make
+this a function to save time later:
+
+\emph{A quick update as of 11/13/2026:}
+
+\emph{Upon further investigation, I found that the \texttt{qualifier}
+variable was being read in incorrectly due to the fact that it was the
+last one in each line of the txt file. we kept having trailing sequences
+of
+\texttt{\textbackslash{}t\textbackslash{}t\textbackslash{}t\textbackslash{}t},
+indicating that a bunch of tabs were being read in. For some reason, the
+data had training tabs at the end. So we are going to remove those
+trailing tabs in the function, which will clean up our qualifier
+variable considerably.}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{rename\_with}\NormalTok{(tolower) }\SpecialCharTok{|\textgreater{}} 
+\NormalTok{clean\_osha }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(df)\{}
+\NormalTok{  df }\SpecialCharTok{|\textgreater{}} 
+    \FunctionTok{rename\_with}\NormalTok{(tolower) }\SpecialCharTok{|\textgreater{}} 
   \FunctionTok{mutate}\NormalTok{(}
     \AttributeTok{date\_sampled =} \FunctionTok{dmy}\NormalTok{(date\_sampled), }
-    \AttributeTok{year =} \FunctionTok{year}\NormalTok{(date\_sampled),}
+    \AttributeTok{year =} \FunctionTok{year}\NormalTok{(date\_sampled), }
          \AttributeTok{type =} \FunctionTok{fct\_recode}\NormalTok{(type,}
                           \StringTok{"Personal"} \OtherTok{=} \StringTok{"P"}\NormalTok{,}
                           \StringTok{"Area"} \OtherTok{=} \StringTok{"A"}\NormalTok{,}
                           \StringTok{"Bulk"} \OtherTok{=} \StringTok{"B"}\NormalTok{, }
-                          \StringTok{"Wipe"} \OtherTok{=} \StringTok{"W"}\NormalTok{), }
-    \AttributeTok{blank =} \FunctionTok{as.logical}\NormalTok{(blank),}
-    \AttributeTok{time =}\NormalTok{ time}\SpecialCharTok{/}\DecValTok{60}\NormalTok{,}
-    \AttributeTok{less\_than\_measurement =} \FunctionTok{grepl}\NormalTok{(}\StringTok{"\^{}}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{s*\textless{}"}\NormalTok{, result),}
+                          \StringTok{"Wipe"} \OtherTok{=} \StringTok{"W"}\NormalTok{),  }
+    \AttributeTok{uom =} \FunctionTok{fct\_recode}\NormalTok{(uom,}
+                          \StringTok{"mg"} \OtherTok{=} \StringTok{"MG"}\NormalTok{, }\CommentTok{\#milligrams}
+                          \StringTok{"mg"} \OtherTok{=} \StringTok{"Y"}\NormalTok{, }\CommentTok{\#milligrams}
+                          \StringTok{"mcg"} \OtherTok{=} \StringTok{"X"}\NormalTok{, }\CommentTok{\#micrograms}
+                          \StringTok{"mcg/m3"} \OtherTok{=} \StringTok{"MCG/M3"}\NormalTok{, }\CommentTok{\#micrograms/m3}
+                          \StringTok{"mg/m3"} \OtherTok{=} \StringTok{"MG\_M3"}\NormalTok{, }\CommentTok{\#milligrams/m3}
+                          \StringTok{"mg/m3"} \OtherTok{=} \StringTok{"M"}\NormalTok{), }\CommentTok{\#milligrams/m3}
+    \FunctionTok{across}\NormalTok{(qualifier, }\SpecialCharTok{\textasciitilde{}} \FunctionTok{na\_if}\NormalTok{(}\FunctionTok{str\_squish}\NormalTok{(.x), }\StringTok{""}\NormalTok{)),}
+    \AttributeTok{duration =} \FunctionTok{case\_when}\NormalTok{(}
+\NormalTok{  time }\SpecialCharTok{\textless{}=} \DecValTok{30}                  \SpecialCharTok{\textasciitilde{}} \StringTok{"Task{-}Based"}\NormalTok{,}
+\NormalTok{  time }\SpecialCharTok{\textgreater{}=} \DecValTok{31}  \SpecialCharTok{\&}\NormalTok{ time }\SpecialCharTok{\textless{}=} \DecValTok{120}   \SpecialCharTok{\textasciitilde{}} \StringTok{"Short{-}Term"}\NormalTok{,}
+\NormalTok{  time }\SpecialCharTok{\textgreater{}=} \DecValTok{121} \SpecialCharTok{\&}\NormalTok{ time }\SpecialCharTok{\textless{}=} \DecValTok{359}   \SpecialCharTok{\textasciitilde{}} \StringTok{"Medium{-}Term"}\NormalTok{,}
+\NormalTok{  time }\SpecialCharTok{\textgreater{}=} \DecValTok{360}                 \SpecialCharTok{\textasciitilde{}} \StringTok{"Long{-}Term"}\NormalTok{,}
+  \ConstantTok{TRUE}                        \SpecialCharTok{\textasciitilde{}} \ConstantTok{NA\_character\_}
+\NormalTok{),}
+    \AttributeTok{lod =} \FunctionTok{grepl}\NormalTok{(}\StringTok{"\^{}}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{s*\textless{}"}\NormalTok{, result),}
+ \AttributeTok{loq =} \FunctionTok{grepl}\NormalTok{(}\StringTok{"ND"}\NormalTok{, qualifier),}
     \AttributeTok{result\_num =} \FunctionTok{as.numeric}\NormalTok{(}\FunctionTok{gsub}\NormalTok{(}\StringTok{"\textless{}}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{s*"}\NormalTok{, }\StringTok{""}\NormalTok{, result))}
 \NormalTok{    ) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{office, }\SpecialCharTok{{-}}\NormalTok{naics, }\SpecialCharTok{{-}}\NormalTok{date\_reported, }\SpecialCharTok{{-}}\NormalTok{lab\_number, }\SpecialCharTok{{-}}\NormalTok{csho, }\SpecialCharTok{{-}}\NormalTok{sic)}
+  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{office, }\SpecialCharTok{{-}}\NormalTok{naics, }\SpecialCharTok{{-}}\NormalTok{date\_reported, }\SpecialCharTok{{-}}\NormalTok{csho, }\SpecialCharTok{{-}}\NormalTok{sic, }\SpecialCharTok{{-}}\NormalTok{instrument) }
+\NormalTok{\}}
+\NormalTok{dat }\OtherTok{\textless{}{-}} \FunctionTok{clean\_osha}\NormalTok{(raw\_dat)  }
+
+\FunctionTok{head}\NormalTok{(dat)  }
 \end{Highlighting}
 \end{Shaded}
 
-\subsection{Examination}\label{examination}
+\begin{verbatim}
+## # A tibble: 6 x 22
+##   inspection sampling_number establishment       date_sampled eighthr lab_number
+##        <dbl> <chr>           <chr>               <date>       <chr>   <chr>     
+## 1    1892548 494572-OIS      DELPHOS GRANITE WO~ 2026-05-14   N       65868     
+## 2    1892548 494575-OIS      DELPHOS GRANITE WO~ 2026-05-14   N       65871     
+## 3    1892548 494578-OIS      DELPHOS GRANITE WO~ 2026-05-14   N       65872     
+## 4    1892548 494579-OIS      DELPHOS GRANITE WO~ 2026-05-14   <NA>    65869     
+## 5    1892548 494575-OIS      DELPHOS GRANITE WO~ 2026-05-14   <NA>    65869     
+## 6    1892548 494578-OIS      DELPHOS GRANITE WO~ 2026-05-14   <NA>    65869     
+## # i 16 more variables: field_number <chr>, type <fct>, blank <chr>, time <dbl>,
+## #   air_volume <dbl>, weight <dbl>, imis <dbl>, substance <chr>, result <chr>,
+## #   uom <fct>, qualifier <chr>, year <dbl>, duration <chr>, lod <lgl>,
+## #   loq <lgl>, result_num <dbl>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{unique}\NormalTok{(dat}\SpecialCharTok{$}\NormalTok{qualifier)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] NA       "ND"     "ND-BLK" "@"      "BLK"    "<="     "=<"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(result\_num }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{nrow}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 858
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(result\_num }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(result\_num) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{head}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 1
+##   result_num
+##        <dbl>
+## 1          0
+## 2          0
+## 3          0
+## 4          0
+## 5          0
+## 6          0
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#smallest result? }
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(result\_num }\SpecialCharTok{!=} \DecValTok{0}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}\AttributeTok{min\_nonzero =} \FunctionTok{min}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 1
+##   min_nonzero
+##         <dbl>
+## 1        0.01
+\end{verbatim}
+
+\subsubsection{Examination}\label{examination}
+
+Let's first see how many years our data spans:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{range}\NormalTok{(dat}\SpecialCharTok{$}\NormalTok{date\_sampled)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] "2017-08-18" "2026-05-14"
+\end{verbatim}
 
 We want to check some of these variables to see whether they are
 relevant to be included (i.e., contain multiple levels).
-
-Let's check what different values are in the data for
-\texttt{instrument}, \texttt{blank}, \texttt{weight}, and \texttt{uom}.
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(instrument) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 1 x 2
-##   instrument `n()`
-##   <lgl>      <int>
-## 1 NA          2135
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(blank) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 1 x 2
-##   blank `n()`
-##   <lgl> <int>
-## 1 NA     2135
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\FunctionTok{summary}\NormalTok{(dat}\SpecialCharTok{$}\NormalTok{weight)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.     NAs 
-##  0.0000  0.0150  0.0530  0.2887  0.1675 16.1420     569
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 7 x 2
-##   uom    `n()`
-##   <chr>  <int>
-## 1 M        202
-## 2 MCG/M3  1236
-## 3 MG       123
-## 4 MG_M3     69
-## 5 X        306
-## 6 Y        143
-## 7 <NA>      56
-\end{verbatim}
 
 It looks like we only have NA values for instrument and blank; we can
 drop. We do have information for weight that may be needed.
@@ -363,7 +377,7 @@ need to look into converting the air volume (liters) to meters cubed.
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \FunctionTok{c}\NormalTok{(}\StringTok{"M"}\NormalTok{, }\StringTok{"MG"}\NormalTok{, }\StringTok{"X"}\NormalTok{, }\StringTok{"Y"}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \FunctionTok{c}\NormalTok{(}\StringTok{"mg/m3"}\NormalTok{, }\StringTok{"mcg/m3"}\NormalTok{, }\StringTok{"mg"}\NormalTok{, }\StringTok{"mcg"}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
   \FunctionTok{select}\NormalTok{(uom, air\_volume) }\SpecialCharTok{|\textgreater{}}
   \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}}
   \FunctionTok{summarise}\NormalTok{(}
@@ -376,12 +390,12 @@ need to look into converting the air volume (liters) to meters cubed.
 
 \begin{verbatim}
 ## # A tibble: 4 x 4
-##   uom   total_rows non_na_values na_count
-##   <chr>      <int>         <int>    <int>
-## 1 M             60            57        3
-## 2 MG            30             0       30
-## 3 X             96             0       96
-## 4 Y             36             0       36
+##   uom    total_rows non_na_values na_count
+##   <fct>       <int>         <int>    <int>
+## 1 mg/m3          76            73        3
+## 2 mcg/m3        298           284       14
+## 3 mg             74             0       74
+## 4 mcg            59             0       59
 \end{verbatim}
 
 It appears that we have some data that is missing air volume
@@ -394,20 +408,6 @@ M = mg/m\^{}3, X = micrograms, Y = milligrams.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{instrument, }\SpecialCharTok{{-}}\NormalTok{blank) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{mutate}\NormalTok{(}
-    \AttributeTok{uom =} \FunctionTok{fct\_recode}\NormalTok{(uom,}
-                          \StringTok{"mg"} \OtherTok{=} \StringTok{"MG"}\NormalTok{, }\CommentTok{\#milligrams}
-                          \StringTok{"mg"} \OtherTok{=} \StringTok{"Y"}\NormalTok{, }\CommentTok{\#milligrams}
-                          \StringTok{"mcg"} \OtherTok{=} \StringTok{"X"}\NormalTok{, }\CommentTok{\#micrograms}
-                          \StringTok{"mcg/m3"} \OtherTok{=} \StringTok{"MCG/M3"}\NormalTok{, }\CommentTok{\#micrograms/m3}
-                          \StringTok{"mg/m3"} \OtherTok{=} \StringTok{"MG\_M3"}\NormalTok{, }\CommentTok{\#milligrams/m3}
-                          \StringTok{"mg/m3"} \OtherTok{=} \StringTok{"M"} \CommentTok{\#milligrams/m3}
-\NormalTok{                     )}
-\NormalTok{    )}
-  
-
 \NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
   \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
   \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{())}
@@ -423,372 +423,6 @@ M = mg/m\^{}3, X = micrograms, Y = milligrams.
 ## 3 mg       266
 ## 4 mcg      306
 ## 5 <NA>      56
-\end{verbatim}
-
-\section{Inclusion/Exclusion}\label{inclusionexclusion}
-
-\subsection{Personal Measurements}\label{personal-measurements}
-
-To start, we have 2,135 observations. Next, we want to restrict our
-sample to only those pertaining to personal measurements.
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(type) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{())}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 3 x 2
-##   type     `n()`
-##   <fct>    <int>
-## 1 Area        20
-## 2 Personal  1839
-## 3 <NA>       276
-\end{verbatim}
-
-We will retain 1,839 observations that used Personal measurements. We
-will drop those for Area measurements (n = 20), and missing data (n =
-276).
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(type }\SpecialCharTok{==} \StringTok{"Personal"}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
-
-Now that we've excluded some samples, let's go back in and see how the
-air volume data fits or doesn't:
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{\%in\%} \FunctionTok{c}\NormalTok{(}\StringTok{"mg"}\NormalTok{, }\StringTok{"mcg"}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{select}\NormalTok{(uom, air\_volume) }\SpecialCharTok{|\textgreater{}}
-  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}}
-  \FunctionTok{summarise}\NormalTok{(}
-    \AttributeTok{total\_rows =} \FunctionTok{n}\NormalTok{(),}
-    \AttributeTok{non\_na\_values =} \FunctionTok{sum}\NormalTok{(}\SpecialCharTok{!}\FunctionTok{is.na}\NormalTok{(air\_volume)),}
-    \AttributeTok{na\_count =} \FunctionTok{sum}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(air\_volume))}
-\NormalTok{  )}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 1 x 4
-##   uom   total_rows non_na_values na_count
-##   <fct>      <int>         <int>    <int>
-## 1 mcg          299             0      299
-\end{verbatim}
-
-Let's also check to see the distribution of samples by year:
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(year) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\AttributeTok{count =} \FunctionTok{n}\NormalTok{()) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{percent =}\NormalTok{ (count}\SpecialCharTok{/}\FunctionTok{sum}\NormalTok{(count))}\SpecialCharTok{*}\DecValTok{100}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 10 x 3
-##     year count percent
-##    <dbl> <int>   <dbl>
-##  1  2017    46    2.50
-##  2  2018    67    3.64
-##  3  2019   154    8.37
-##  4  2020    89    4.84
-##  5  2021   144    7.83
-##  6  2022   107    5.82
-##  7  2023   356   19.4 
-##  8  2024   534   29.0 
-##  9  2025   234   12.7 
-## 10  2026   108    5.87
-\end{verbatim}
-
-\emph{Note:} after excluding non-personal samples, we no longer have
-values that are in milligrams.
-
-We are left with the resulting microgram observations, which do appear
-as though they are all lacking data on air volume.
-
-Let's do one last check, as it is possible that these values correspond
-to the time-weighted average:
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \StringTok{"mcg"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{select}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 2 x 2
-##   eighthr `n()`
-##   <chr>   <int>
-## 1 N          62
-## 2 Y         237
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==}\StringTok{"mcg"} \SpecialCharTok{\&}\NormalTok{ eighthr }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(qualifier) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 2 x 2
-##   qualifier `n()`
-##   <chr>     <int>
-## 1 ND            1
-## 2 ND-BLK       61
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==}\StringTok{"mcg"} \SpecialCharTok{\&}\NormalTok{ eighthr }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(air\_volume) }\SpecialCharTok{|\textgreater{}}
-  \FunctionTok{summarise}\NormalTok{(}
-    \AttributeTok{total\_rows =} \FunctionTok{n}\NormalTok{(),}
-    \AttributeTok{non\_na\_values =} \FunctionTok{sum}\NormalTok{(}\SpecialCharTok{!}\FunctionTok{is.na}\NormalTok{(air\_volume)),}
-    \AttributeTok{na\_count =} \FunctionTok{sum}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(air\_volume))}
-\NormalTok{  )}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 1 x 4
-##   air_volume total_rows non_na_values na_count
-##        <dbl>      <int>         <int>    <int>
-## 1         NA         62             0       62
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==}\StringTok{"mcg"} \SpecialCharTok{\&}\NormalTok{ eighthr }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{select}\NormalTok{(result\_num) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summary}\NormalTok{() }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-##    result_num
-##  Min.   :0   
-##  1st Qu.:0   
-##  Median :0   
-##  Mean   :0   
-##  3rd Qu.:0   
-##  Max.   :0
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==}\StringTok{"mcg"} \SpecialCharTok{\&}\NormalTok{ eighthr }\SpecialCharTok{==} \StringTok{"Y"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{select}\NormalTok{(result\_num) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summary}\NormalTok{()}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-##    result_num      
-##  Min.   : 0.00000  
-##  1st Qu.: 0.00000  
-##  Median : 0.00000  
-##  Mean   : 0.04304  
-##  3rd Qu.: 0.00000  
-##  Max.   :10.20000
-\end{verbatim}
-
-Ok, we have figured out what happened --\textgreater{} specifically the
-measurements that aren't standardized to volume all contains results
-less than the quantification limit or are blank.
-
-\subsection{Time-weighted average
-observations}\label{time-weighted-average-observations}
-
-Next, we want to get an idea of how our samples may differ depending on
-how many of them used a time-weighted average.
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 3 x 2
-##   eighthr           `n()`
-##   <chr>             <int>
-## 1 N                   728
-## 2 STEL CEILING PEAK     8
-## 3 Y                  1103
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(eighthr }\SpecialCharTok{==} \StringTok{"STEL CEILING PEAK"}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
-  \FunctionTok{select}\NormalTok{(}\FunctionTok{everything}\NormalTok{())  }\CommentTok{\# STEL information }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 8 x 18
-##   inspection sampling_number establishment date_sampled eighthr     field_number
-##        <dbl> <chr>           <chr>         <date>       <chr>       <chr>       
-## 1    1863156 484899-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 3B1         
-## 2    1863156 484896-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 2B2         
-## 3    1863156 484899-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 3B2         
-## 4    1863156 484900-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 5B1         
-## 5    1863156 484900-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 5B2         
-## 6    1863156 484896-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 2B1         
-## 7    1863156 484901-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 4B1         
-## 8    1863156 484901-OIS      GRANITE USA   2025-12-17   STEL CEILI~ 4B2         
-## # i 12 more variables: type <fct>, time <dbl>, air_volume <dbl>, weight <dbl>,
-## #   imis <dbl>, substance <chr>, result <chr>, uom <fct>, qualifier <chr>,
-## #   year <dbl>, less_than_measurement <lgl>, result_num <dbl>
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\CommentTok{\#examining time distribution by the time{-}weighted data: }
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}}  
-  \FunctionTok{summarise}\NormalTok{(}
-    \AttributeTok{count =} \FunctionTok{n}\NormalTok{(),}
-    \AttributeTok{mean =} \FunctionTok{mean}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
-    \AttributeTok{median =} \FunctionTok{median}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
-    \AttributeTok{min =} \FunctionTok{min}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
-    \AttributeTok{max =} \FunctionTok{max}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
-    \AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{)}
-\NormalTok{  ) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 3 x 7
-##   eighthr           count   mean median    min      max       sd
-##   <chr>             <int>  <dbl>  <dbl>  <dbl>    <dbl>    <dbl>
-## 1 N                   728 61.7   0.0126 0      4110     301.    
-## 2 STEL CEILING PEAK     8  0.102 0.0988 0.0302    0.195   0.0517
-## 3 Y                  1103 87.2   0.0174 0      5093     382.
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\CommentTok{\#is there a time{-}trend component to the data that are missing time{-}weighting? }
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(year, eighthr) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarize}\NormalTok{(}\AttributeTok{count =} \FunctionTok{n}\NormalTok{(), }\AttributeTok{.groups =} \StringTok{\textquotesingle{}drop\textquotesingle{}}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
-  \FunctionTok{ggplot}\NormalTok{(}\FunctionTok{aes}\NormalTok{(}\AttributeTok{x =}\NormalTok{ year, }\AttributeTok{y =}\NormalTok{ count, }\AttributeTok{fill =}\NormalTok{ eighthr)) }\SpecialCharTok{+}
-  \FunctionTok{geom\_col}\NormalTok{(}\AttributeTok{position =} \StringTok{"dodge"}\NormalTok{) }\SpecialCharTok{+}
-  \FunctionTok{labs}\NormalTok{(}\AttributeTok{title =} \StringTok{"Frequency by Year and Eight Hour Classification"}\NormalTok{,}
-       \AttributeTok{x =} \StringTok{"Year"}\NormalTok{,}
-       \AttributeTok{y =} \StringTok{"Count"}\NormalTok{,}
-       \AttributeTok{fill =} \StringTok{"Eight Hour"}\NormalTok{) }\SpecialCharTok{+}
-  \FunctionTok{theme\_minimal}\NormalTok{() }\SpecialCharTok{+}
-  \FunctionTok{theme}\NormalTok{(}\AttributeTok{axis.text.x =} \FunctionTok{element\_text}\NormalTok{(}\AttributeTok{angle =} \DecValTok{45}\NormalTok{, }\AttributeTok{hjust =} \DecValTok{1}\NormalTok{))}
-\end{Highlighting}
-\end{Shaded}
-
-\pandocbounded{\includegraphics[keepaspectratio]{01_Cleaning_files/01_Cleaning_files/figure-latex/unnamed-chunk-11-1.pdf}}
-Looks like we will not be retaining any of the results corresponding to
-the STEL ceiling peak as they have way too short times of duration.
-
-\subsection{Over 6-hours of duration}\label{over-6-hours-of-duration}
-
-Let's create an indicator variable for whether the measurements were
-above 6-hours or not, and take a peek at what data remains:
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{six\_hour =}\NormalTok{ time }\SpecialCharTok{\textgreater{}=} \DecValTok{6}\NormalTok{ )}
-
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(six\_hour) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarise}\NormalTok{(}
-    \AttributeTok{count =} \FunctionTok{n}\NormalTok{(),}
-    \AttributeTok{mean =} \FunctionTok{mean}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
-    \AttributeTok{median =} \FunctionTok{median}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
-    \AttributeTok{min =} \FunctionTok{min}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
-    \AttributeTok{max =} \FunctionTok{max}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{),}
-    \AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(result\_num, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{)) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 3 x 7
-##   six_hour count     mean  median   min    max      sd
-##   <lgl>    <int>    <dbl>   <dbl> <dbl>  <dbl>   <dbl>
-## 1 FALSE      817  76.7     0.0324     0 4110   259.   
-## 2 TRUE       631 126.     16.1        0 5093   523.   
-## 3 NA         391   0.0271  0          0   10.2   0.526
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\CommentTok{\#what about the observations that are below, are they time{-}weighted? }
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{filter}\NormalTok{(six\_hour }\SpecialCharTok{\%in\%} \FunctionTok{c}\NormalTok{(}\ConstantTok{FALSE}\NormalTok{, }\ConstantTok{NA}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(six\_hour,eighthr) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarise}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 5 x 3
-## # Groups:   six_hour [2]
-##   six_hour eighthr           `n()`
-##   <lgl>    <chr>             <int>
-## 1 FALSE    N                   323
-## 2 FALSE    STEL CEILING PEAK     8
-## 3 FALSE    Y                   486
-## 4 NA       N                   134
-## 5 NA       Y                   257
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\CommentTok{\#if we only retain measurements over six hours, how much data do we have per year? }
-\NormalTok{dat }\SpecialCharTok{|\textgreater{}}  
-  \FunctionTok{filter}\NormalTok{(six\_hour }\SpecialCharTok{==} \ConstantTok{TRUE}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{group\_by}\NormalTok{(year) }\SpecialCharTok{|\textgreater{}} 
-  \FunctionTok{summarise}\NormalTok{(}
-    \AttributeTok{count =} \FunctionTok{n}\NormalTok{()) }
-\end{Highlighting}
-\end{Shaded}
-
-\begin{verbatim}
-## # A tibble: 10 x 2
-##     year count
-##    <dbl> <int>
-##  1  2017    11
-##  2  2018    31
-##  3  2019    40
-##  4  2020    34
-##  5  2021    62
-##  6  2022    48
-##  7  2023    97
-##  8  2024   164
-##  9  2025    93
-## 10  2026    51
 \end{verbatim}
 
 Before we exclude any data, we want to check if we have repeated
@@ -822,7 +456,7 @@ measurements per establishments:
 ## # A tibble: 1 x 7
 ##   total_establishments mean_obs_per_est median_obs_per_est est_with_5plus
 ##                  <int>            <dbl>              <int>          <int>
-## 1                  393             4.68                  4            156
+## 1                  393             5.43                  4            191
 ## # i 3 more variables: est_with_10plus <int>, pct_5plus <dbl>, pct_10plus <dbl>
 \end{verbatim}
 
@@ -840,13 +474,13 @@ measurements per establishments:
 \end{Highlighting}
 \end{Shaded}
 
-\pandocbounded{\includegraphics[keepaspectratio]{01_Cleaning_files/01_Cleaning_files/figure-latex/unnamed-chunk-13-1.pdf}}
+\pandocbounded{\includegraphics[keepaspectratio]{01_Cleaning_files/01_Cleaning_files/figure-latex/unnamed-chunk-6-1.pdf}}
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \CommentTok{\#Restricted sample: }
 \NormalTok{restricted\_sample\_check }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}}
-  \FunctionTok{filter}\NormalTok{(six\_hour }\SpecialCharTok{==} \DecValTok{1}\NormalTok{) }\SpecialCharTok{|\textgreater{}}  \CommentTok{\# or your \textgreater{} 6 hour filter}
+  \FunctionTok{filter}\NormalTok{(time }\SpecialCharTok{\textgreater{}=} \DecValTok{6}\NormalTok{) }\SpecialCharTok{|\textgreater{}}  \CommentTok{\# or your \textgreater{} 6 hour filter}
   \FunctionTok{group\_by}\NormalTok{(establishment) }\SpecialCharTok{|\textgreater{}}
   \FunctionTok{summarise}\NormalTok{(}
     \AttributeTok{n\_obs =} \FunctionTok{n}\NormalTok{(),}
@@ -870,8 +504,8 @@ measurements per establishments:
 \begin{verbatim}
 ## # A tibble: 1 x 7
 ##   total_establishments mean_obs_per_est median_obs_per_est est_with_5plus
-##                  <int>            <dbl>              <int>          <int>
-## 1                  207             3.05                  3             32
+##                  <int>            <dbl>              <dbl>          <int>
+## 1                  392             3.73                  3             89
 ## # i 3 more variables: est_with_10plus <int>, pct_5plus <dbl>, pct_10plus <dbl>
 \end{verbatim}
 
@@ -895,9 +529,9 @@ measurements per establishments:
 ## # A tibble: 3 x 4
 ##   criterion                guideline full_sample restricted_sample
 ##   <chr>                    <chr>           <dbl>             <dbl>
-## 1 Number of establishments ≥20-30          393               207  
-## 2 % with 5+ observations   ~80%+            39.7              15.5
-## 3 % with 10+ observations  ~50%+             5.6               1
+## 1 Number of establishments ≥20-30          393               392  
+## 2 % with 5+ observations   ~80%+            48.6              22.7
+## 3 % with 10+ observations  ~50%+             8.4               3.6
 \end{verbatim}
 
 We do not meet the assumptions of LMEM according to
@@ -911,5 +545,2309 @@ errors to account for within-group variation. To deal with this, we are
 going to plan on fitting a generalized linear mixed model that adds a
 cluster-specific random effect to the linear predictor. Our cluster
 variable will be id.
+
+\subsection{Unit of Measurement
+Consistency}\label{unit-of-measurement-consistency}
+
+We need to make sure we are only using reported results under one
+standard unit of measurement.
+
+Since the OSHA limits correspond to micrograms/m\^{}3, we will convert
+our other measurement to be consistent with this.
+
+Just to review, let's double-check what the possible values are for our
+silica measurements:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 5 x 2
+##   uom    `n()`
+##   <fct>  <int>
+## 1 mg/m3    271
+## 2 mcg/m3  1236
+## 3 mg       266
+## 4 mcg      306
+## 5 <NA>      56
+\end{verbatim}
+
+We have 56 that are NA, let's just double check that these aren't all
+time-weighted before we consider deleting them:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(uom)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+##   eighthr `n()`
+##   <chr>   <int>
+## 1 N          39
+## 2 Y          17
+\end{verbatim}
+
+There are 39 observations that are not time-weighted, so we need to be
+sure to exclude them from the sample. We are also going to plan on doing
+a sensitivity analysis on the observations that have no uom but are
+time-weighted; we cannot be sure what units these are in, so we can add
+them back in later and see whether things change significantly.
+
+\subsubsection{Comparing mg to mcg}\label{comparing-mg-to-mcg}
+
+Before we convert all our units, let's do a check to see how the
+different concentrations differ:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\AttributeTok{n=} \FunctionTok{n}\NormalTok{(),}
+            \AttributeTok{mean =} \FunctionTok{mean}\NormalTok{(result\_num),}
+            \AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(result\_num))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 5 x 4
+##   uom        n     mean        sd
+##   <fct>  <int>    <dbl>     <dbl>
+## 1 mg/m3    271  NA       NA      
+## 2 mcg/m3  1236 110.     417.     
+## 3 mg       266   0.0106   0.00231
+## 4 mcg      306   0.0333   0.583  
+## 5 <NA>      56  NA       NA
+\end{verbatim}
+
+Looks like we need to see how many observations are missing data for the
+mg/m3 observations:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \StringTok{"mg/m3"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\AttributeTok{n =} \FunctionTok{sum}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(result\_num)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 1
+##       n
+##   <int>
+## 1    29
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \StringTok{"mg/m3"}\NormalTok{ ) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(qualifier) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 2
+##   qualifier `n()`
+##   <chr>     <int>
+## 1 <NA>        271
+\end{verbatim}
+
+\subsection{Establishment
+standardization}\label{establishment-standardization}
+
+Now that we have our datasets for respirable silica and our calculated
+versions, we need to prepare for the merge by deleting duplicate
+entries. We have some duplicates that are the same field and lab number,
+due to different spellings of the establishment.
+
+We are going to make a function that resolves duplicate lab\_number +
+field\_number entries caused by inconsistent spelling.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{standardize\_establishment }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(x) \{}
+\NormalTok{  x }\SpecialCharTok{|\textgreater{}}
+    \FunctionTok{str\_squish}\NormalTok{() }\SpecialCharTok{|\textgreater{}}                          \CommentTok{\# trim + collapse internal whitespace}
+    \FunctionTok{str\_to\_upper}\NormalTok{() }\SpecialCharTok{|\textgreater{}}
+    \FunctionTok{str\_replace\_all}\NormalTok{(}\StringTok{"\&"}\NormalTok{, }\StringTok{"AND"}\NormalTok{) }\SpecialCharTok{|\textgreater{}}           \CommentTok{\# unify ampersand vs "AND"}
+    \FunctionTok{str\_replace\_all}\NormalTok{(}\StringTok{"[[:punct:]]"}\NormalTok{, }\StringTok{""}\NormalTok{) }\SpecialCharTok{|\textgreater{}}    \CommentTok{\# strip periods, commas, hyphens, etc.}
+    \FunctionTok{str\_squish}\NormalTok{()                             }\CommentTok{\# re{-}squish in case punctuation removal left double spaces}
+\NormalTok{\} }
+
+
+\NormalTok{dat }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} \FunctionTok{mutate}\NormalTok{(}\AttributeTok{establishment =} \FunctionTok{standardize\_establishment}\NormalTok{(establishment)) }
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Inclusion/Exclusion}\label{inclusionexclusion}
+
+To begin, let's see how many observations we have:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{nrow}\NormalTok{(dat)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 2135
+\end{verbatim}
+
+We are starting with 2,135.
+
+\subsubsection{Correct Measurement}\label{correct-measurement}
+
+We need our data to record a legitimate recorded measurement. First, we
+will check to see what the samples are recorded as when they are listed
+as being LOQ:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}}  
+  \FunctionTok{summarise}\NormalTok{(}\FunctionTok{sum}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(result\_num)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 1
+##   `sum(is.na(result_num))`
+##                      <int>
+## 1                       85
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(result\_num)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(qualifier) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 2
+##   qualifier `n()`
+##   <chr>     <int>
+## 1 <NA>         85
+\end{verbatim}
+
+There are 85 observations that are missing data for the recorded
+measurement. As such we will have to delete these observations.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat2 }\OtherTok{\textless{}{-}}\NormalTok{ dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\SpecialCharTok{!}\FunctionTok{is.na}\NormalTok{(result\_num))}
+\end{Highlighting}
+\end{Shaded}
+
+After removal, we now have 2,050 observations.
+
+\subsubsection{Removing samples lacking concentration
+data}\label{removing-samples-lacking-concentration-data}
+
+We are only going to retain samples that contain clear units
+standardized to air volume. We cannot convert our observations to a
+concentration that are standalones, since they lack air volume data.
+
+To our best knowledge, the records cannot be personal air samples, and
+were likely bulk samples that were miscoded as personal samples.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat3 }\OtherTok{\textless{}{-}}\NormalTok{ dat2 }\SpecialCharTok{|\textgreater{}} 
+    \FunctionTok{mutate}\NormalTok{(}
+    \AttributeTok{result\_num =} \FunctionTok{case\_when}\NormalTok{(}
+\NormalTok{      uom }\SpecialCharTok{==} \StringTok{"mg"} \SpecialCharTok{\textasciitilde{}}\NormalTok{ result\_num }\SpecialCharTok{*} \DecValTok{1000}\NormalTok{,      }\CommentTok{\# mg → mcg (multiply by 1000)}
+\NormalTok{      uom }\SpecialCharTok{==} \StringTok{"mg/m3"} \SpecialCharTok{\textasciitilde{}}\NormalTok{ result\_num }\SpecialCharTok{*} \DecValTok{1000}\NormalTok{,   }\CommentTok{\# mg/m3 → mcg/m3 (multiply by 1000)}
+      \ConstantTok{TRUE} \SpecialCharTok{\textasciitilde{}}\NormalTok{ result\_num}
+\NormalTok{    ),}
+    \AttributeTok{uom =} \FunctionTok{case\_when}\NormalTok{(}
+\NormalTok{      uom }\SpecialCharTok{==} \StringTok{"mg"} \SpecialCharTok{\textasciitilde{}} \StringTok{"mcg"}\NormalTok{,}
+\NormalTok{      uom }\SpecialCharTok{==} \StringTok{"mg/m3"} \SpecialCharTok{\textasciitilde{}} \StringTok{"mcg/m3"}\NormalTok{,}
+      \ConstantTok{TRUE} \SpecialCharTok{\textasciitilde{}}\NormalTok{ uom}
+\NormalTok{    )}
+\NormalTok{  ) }
+
+\NormalTok{dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}\FunctionTok{n}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+##   uom    `n()`
+##   <chr>  <int>
+## 1 mcg      572
+## 2 mcg/m3  1478
+\end{verbatim}
+
+At this time, there are 572 measurements that are not in concentration
+form. We will exclude:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat3 }\OtherTok{\textless{}{-}}\NormalTok{ dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \StringTok{"mcg/m3"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+We now have 1,478 observations. We will rename the results into a
+consistent variable name for later, called ``silica\_conc'':
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat3 }\OtherTok{\textless{}{-}}\NormalTok{ dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{silica\_conc =}\NormalTok{ result\_num)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{No blank samples}\label{no-blank-samples}
+
+Next we will exclude all samples that were recorded as blank.
+
+In this case, we only have samples that are coded as BOTH non-detect and
+blanks, rather than just blank alone. Because of this, we will retain
+all of the observations.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(qualifier) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{()  }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 2
+## # Groups:   qualifier [6]
+##   qualifier     n
+##   <chr>     <int>
+## 1 <=            9
+## 2 =<            1
+## 3 @            13
+## 4 ND          479
+## 5 ND-BLK       74
+## 6 <NA>        902
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(qualifier,loq) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 3
+## # Groups:   qualifier, loq [6]
+##   qualifier loq       n
+##   <chr>     <lgl> <int>
+## 1 <=        FALSE     9
+## 2 =<        FALSE     1
+## 3 @         FALSE    13
+## 4 ND        TRUE    479
+## 5 ND-BLK    TRUE     74
+## 6 <NA>      FALSE   902
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(blank) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+## # Groups:   blank [2]
+##   blank     n
+##   <chr> <int>
+## 1 N      1401
+## 2 Y        77
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat4 }\OtherTok{\textless{}{-}}\NormalTok{ dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(blank }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }
+\end{Highlighting}
+\end{Shaded}
+
+\subsubsection{No duplicate samples}\label{no-duplicate-samples}
+
+We need to ensure that we don't have duplicate samples in the data.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{nrow}\NormalTok{(dat4) }\CommentTok{\#how many rows in data?  }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 1401
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#look at duplicates }
+\NormalTok{dat4\_duplicates }\OtherTok{\textless{}{-}}\NormalTok{ dat4 }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{group\_by}\NormalTok{(lab\_number, field\_number, silica\_conc, date\_sampled) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{n}\NormalTok{() }\SpecialCharTok{\textgreater{}} \DecValTok{1}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{ungroup}\NormalTok{() }
+
+\NormalTok{dat4\_duplicates }\SpecialCharTok{|\textgreater{}}  
+  \FunctionTok{select}\NormalTok{(lab\_number, field\_number, date\_sampled, establishment, silica\_conc) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{head}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 5
+##   lab_number field_number date_sampled establishment                 silica_conc
+##   <chr>      <chr>        <date>       <chr>                               <dbl>
+## 1 F30195     01581D       2023-11-02   OZARK MOUNTAIN GRANITE AND T~       214  
+## 2 F30196     08368D       2023-11-02   OZARK MOUNTAIN GRANITE AND T~        43.9
+## 3 F30195     01581D       2023-11-02   OZARK MOUNTAIN GRANITE AND T~       214  
+## 4 F30196     08368D       2023-11-02   OZARK MOUNTAIN GRANITE AND T~        43.9
+## 5 F30067     07870E       2023-11-01   W C CANNIFF AND SONS INC              0  
+## 6 F30067     07870E       2023-11-01   WC CANNIFF AND SONS INC               0
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{nrow}\NormalTok{(dat4\_duplicates)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 196
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#all variables }
+\NormalTok{dat4\_duplicates }\SpecialCharTok{|\textgreater{}}   
+  \FunctionTok{head}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 23
+##   inspection sampling_number establishment       date_sampled eighthr lab_number
+##        <dbl> <chr>           <chr>               <date>       <chr>   <chr>     
+## 1    1690207 433379          OZARK MOUNTAIN GRA~ 2023-11-02   Y       F30195    
+## 2    1690207 433380          OZARK MOUNTAIN GRA~ 2023-11-02   Y       F30196    
+## 3    1690207 433379          OZARK MOUNTAIN GRA~ 2023-11-02   Y       F30195    
+## 4    1690207 433380          OZARK MOUNTAIN GRA~ 2023-11-02   Y       F30196    
+## 5    1694359 433269          W C CANNIFF AND SO~ 2023-11-01   Y       F30067    
+## 6    1694359 433269          WC CANNIFF AND SON~ 2023-11-01   Y       F30067    
+## # i 17 more variables: field_number <chr>, type <fct>, blank <chr>, time <dbl>,
+## #   air_volume <dbl>, weight <dbl>, imis <dbl>, substance <chr>, result <chr>,
+## #   uom <chr>, qualifier <chr>, year <dbl>, duration <chr>, lod <lgl>,
+## #   loq <lgl>, result_num <dbl>, silica_conc <dbl>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat4\_dedup }\OtherTok{\textless{}{-}}\NormalTok{ dat4}\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{distinct}\NormalTok{(lab\_number, field\_number, silica\_conc, date\_sampled, }
+           \AttributeTok{.keep\_all =} \ConstantTok{TRUE}\NormalTok{) }
+
+\FunctionTok{nrow}\NormalTok{(dat4\_dedup) }\CommentTok{\#how many rows are left after deleting duplicates? }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 1303
+\end{verbatim}
+
+After removing duplicates, we have 872 observations.
+
+\subsubsection{Only Personal
+Measurements}\label{only-personal-measurements}
+
+We only want to retain personal measurements for this analysis:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat4\_dedup }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(type) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+## # Groups:   type [2]
+##   type         n
+##   <fct>    <int>
+## 1 Area         9
+## 2 Personal  1294
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat5 }\OtherTok{\textless{}{-}}\NormalTok{ dat4\_dedup }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(type }\SpecialCharTok{==} \StringTok{"Personal"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+We are left with 865 observations after removing 7 area measurements.
+
+\subsubsection{Contains time data}\label{contains-time-data}
+
+We need to ensure that we have measurements that were taken contain data
+for time.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat5 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(duration) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 4 x 2
+##   duration    `n()`
+##   <chr>       <int>
+## 1 Long-Term     561
+## 2 Medium-Term   625
+## 3 Short-Term     98
+## 4 Task-Based     10
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat6 }\OtherTok{\textless{}{-}}\NormalTok{ dat5 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\SpecialCharTok{!}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(duration)))}
+\end{Highlighting}
+\end{Shaded}
+
+3 are missing time data.
+
+Let's check and see how many observations we have:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{glimpse}\NormalTok{(dat6) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Rows: 1,294
+## Columns: 23
+## $ inspection      <dbl> 1892548, 1892548, 1892548, 1875265, 1875265, 1887587, ~
+## $ sampling_number <chr> "494572-OIS", "494575-OIS", "494578-OIS", "492231-OIS"~
+## $ establishment   <chr> "DELPHOS GRANITE WORKS INC", "DELPHOS GRANITE WORKS IN~
+## $ date_sampled    <date> 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16, 2026-~
+## $ eighthr         <chr> "N", "N", "N", "Y", "Y", "N", "N", "N", "N", "N", "N",~
+## $ lab_number      <chr> "65868", "65871", "65872", "64207", "64209", "63660", ~
+## $ field_number    <chr> "00775F", "00641F", "00235F", "04715D", "01043H", "093~
+## $ type            <fct> Personal, Personal, Personal, Personal, Personal, Pers~
+## $ blank           <chr> "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N",~
+## $ time            <dbl> 479, 434, 429, 390, 390, 452, 452, 453, 453, 444, 444,~
+## $ air_volume      <dbl> 785.5600, 720.4400, 707.8500, 659.1000, 663.0000, 777.~
+## $ weight          <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ imis            <dbl> 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, 9000, ~
+## $ substance       <chr> "SILICA, RESPIRABLE CRYSTALLINE (NEW)", "SILICA, RESPI~
+## $ result          <chr> "< 0.0127", "< 0.0139", "< 0.0141", "0.25", "0.214", "~
+## $ uom             <chr> "mcg/m3", "mcg/m3", "mcg/m3", "mcg/m3", "mcg/m3", "mcg~
+## $ qualifier       <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ year            <dbl> 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, ~
+## $ duration        <chr> "Long-Term", "Long-Term", "Long-Term", "Long-Term", "L~
+## $ lod             <lgl> TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, TRU~
+## $ loq             <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE~
+## $ result_num      <dbl> 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9~
+## $ silica_conc     <dbl> 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9~
+\end{verbatim}
+
+Quick check for result numeric equal to 0 :
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat6 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(result\_num }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{nrow}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 432
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat6 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(result\_num }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(loq) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 2
+## # Groups:   loq [1]
+##   loq       n
+##   <lgl> <int>
+## 1 TRUE    432
+\end{verbatim}
+
+Let's clean up our data too, only retaining the variables we need:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat7 }\OtherTok{\textless{}{-}}\NormalTok{ dat6 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(sampling\_number, establishment, date\_sampled, lab\_number, field\_number, time, duration, imis, year, silica\_conc, lod, loq)}
+\end{Highlighting}
+\end{Shaded}
+
+\section{IMIS 9130 and 9010 Data
+Import}\label{imis-9130-and-9010-data-import}
+
+Next, we need to import the data pertaining to the other two codes. We
+need to be certain that the samples match with each other (matching on
+``Lab No.''), before multiplying the respirable dust concentration by
+the quartz percentage for corresponding samples.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust\_dat }\OtherTok{\textless{}{-}} \FunctionTok{read\_delim}\NormalTok{(}\StringTok{"../RawData/Respirable\_Dust\_Concentration.txt"}\NormalTok{, }\AttributeTok{delim =} \StringTok{"|"}\NormalTok{,}
+           \AttributeTok{col\_types =} \FunctionTok{cols}\NormalTok{(}\AttributeTok{Result =} \FunctionTok{col\_character}\NormalTok{()))}
+\FunctionTok{glimpse}\NormalTok{(dust\_dat)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Rows: 3,893
+## Columns: 23
+## $ INSPECTION      <dbl> 1892548, 1892548, 1892548, 1892548, 1892548, 1892548, ~
+## $ SAMPLING_NUMBER <chr> "494572-OIS", "494575-OIS", "494578-OIS", "494579-OIS"~
+## $ OFFICE          <dbl> 524700, 524700, 524700, 524700, 524700, 524700, 524700~
+## $ ESTABLISHMENT   <chr> "DELPHOS GRANITE WORKS INC", "DELPHOS GRANITE WORKS IN~
+## $ SIC             <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ NAICS           <dbl> 327991, 327991, 327991, 327991, 327991, 327991, 327991~
+## $ CSHO            <lgl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ DATE_SAMPLED    <chr> "14-MAY-26", "14-MAY-26", "14-MAY-26", "14-MAY-26", "1~
+## $ DATE_REPORTED   <chr> "05-JUN-26", "05-JUN-26", "05-JUN-26", "05-JUN-26", "0~
+## $ EIGHTHR         <chr> "N", "N", "N", NA, NA, NA, NA, NA, "Y", "Y", NA, NA, N~
+## $ INSTRUMENT      <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ LAB_NUMBER      <chr> "65868", "65871", "65872", "65869", "65869", "65869", ~
+## $ FIELD_NUMBER    <chr> "00775F", "00641F", "00235F", "00718F", "00718F", "007~
+## $ TYPE            <chr> "P", "P", "P", NA, NA, NA, NA, NA, "P", "P", NA, NA, N~
+## $ BLANK           <chr> "N", "N", "N", "Y", "Y", "Y", "Y", "Y", "N", "N", "Y",~
+## $ TIME            <dbl> 479, 434, 429, NA, NA, NA, NA, NA, 390, 390, NA, NA, N~
+## $ AIR_VOLUME      <dbl> 785.5600, 720.4400, 707.8500, NA, NA, NA, NA, NA, 659.~
+## $ WEIGHT          <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ IMIS            <dbl> 9130, 9130, 9130, 9130, 9130, 9130, 9130, 9130, 9130, ~
+## $ SUBSTANCE       <chr> "PARTICULATES NOT OTHERWISE REGULATED (RESPIRABLE FRAC~
+## $ RESULT          <chr> "< 0.109", "0.124", "0.278", "< 0.0860", "< 0.0860", "~
+## $ UOM             <chr> "M", "M", "M", "MG", "MG", "MG", "MG", "MG", "M", "M",~
+## $ QUALIFIER       <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{head}\NormalTok{(dust\_dat) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 23
+##   INSPECTION SAMPLING_NUMBER OFFICE ESTABLISHMENT               SIC  NAICS CSHO 
+##        <dbl> <chr>            <dbl> <chr>                     <dbl>  <dbl> <lgl>
+## 1    1892548 494572-OIS      524700 DELPHOS GRANITE WORKS INC    NA 327991 NA   
+## 2    1892548 494575-OIS      524700 DELPHOS GRANITE WORKS INC    NA 327991 NA   
+## 3    1892548 494578-OIS      524700 DELPHOS GRANITE WORKS INC    NA 327991 NA   
+## 4    1892548 494579-OIS      524700 DELPHOS GRANITE WORKS INC    NA 327991 NA   
+## 5    1892548 494575-OIS      524700 DELPHOS GRANITE WORKS INC    NA 327991 NA   
+## 6    1892548 494578-OIS      524700 DELPHOS GRANITE WORKS INC    NA 327991 NA   
+## # i 16 more variables: DATE_SAMPLED <chr>, DATE_REPORTED <chr>, EIGHTHR <chr>,
+## #   INSTRUMENT <chr>, LAB_NUMBER <chr>, FIELD_NUMBER <chr>, TYPE <chr>,
+## #   BLANK <chr>, TIME <dbl>, AIR_VOLUME <dbl>, WEIGHT <dbl>, IMIS <dbl>,
+## #   SUBSTANCE <chr>, RESULT <chr>, UOM <chr>, QUALIFIER <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{tail}\NormalTok{(dust\_dat) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 23
+##   INSPECTION SAMPLING_NUMBER OFFICE ESTABLISHMENT               SIC  NAICS CSHO 
+##        <dbl> <chr>            <dbl> <chr>                     <dbl>  <dbl> <lgl>
+## 1  306108887 433992302       523300 AVCORE INC                 3281 327991 NA   
+## 2  306108887 433992294       523300 AVCORE INC                 3281 327991 NA   
+## 3  306211988 913783494       418100 ARRISCRAFT INTERNATIONAL~  3281 327991 NA   
+## 4  306211988 913783486       418100 ARRISCRAFT INTERNATIONAL~  3281 327991 NA   
+## 5  306211988 913783486       418100 ARRISCRAFT INTERNATIONAL~  3281 327991 NA   
+## 6  305501512 913124319       418800 CLASSIC CULTURED MARBLE ~  3281 327991 NA   
+## # i 16 more variables: DATE_SAMPLED <chr>, DATE_REPORTED <chr>, EIGHTHR <chr>,
+## #   INSTRUMENT <chr>, LAB_NUMBER <chr>, FIELD_NUMBER <chr>, TYPE <chr>,
+## #   BLANK <chr>, TIME <dbl>, AIR_VOLUME <dbl>, WEIGHT <dbl>, IMIS <dbl>,
+## #   SUBSTANCE <chr>, RESULT <chr>, UOM <chr>, QUALIFIER <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz\_dat }\OtherTok{\textless{}{-}} \FunctionTok{read\_delim}\NormalTok{(}\StringTok{"../RawData/Crystalline\_Quartz\_Fraction.txt"}\NormalTok{, }\AttributeTok{delim =} \StringTok{"|"}\NormalTok{,}
+           \AttributeTok{col\_types =} \FunctionTok{cols}\NormalTok{(}\AttributeTok{Result =} \FunctionTok{col\_character}\NormalTok{()))}
+\FunctionTok{glimpse}\NormalTok{(quartz\_dat)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Rows: 4,672
+## Columns: 23
+## $ INSPECTION      <dbl> 1349545, 1349545, 1349545, 1349545, 1349545, 1349545, ~
+## $ SAMPLING_NUMBER <chr> "325911", "325913", "325915", "325916", "325916", "325~
+## $ OFFICE          <dbl> 830500, 830500, 830500, 830500, 830500, 830500, 626300~
+## $ ESTABLISHMENT   <chr> "TELLURIDE STONE COMPANY", "TELLURIDE STONE COMPANY", ~
+## $ SIC             <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ NAICS           <dbl> 327991, 327991, 327991, 327991, 327991, 327991, 327991~
+## $ CSHO            <lgl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ DATE_SAMPLED    <chr> "26-SEP-18", "26-SEP-18", "26-SEP-18", "26-SEP-18", "2~
+## $ DATE_REPORTED   <chr> "07-NOV-18", "07-NOV-18", "07-NOV-18", "07-NOV-18", "0~
+## $ EIGHTHR         <chr> "N", "N", "N", "N", "N", "N", "Y", "Y", "Y", "Y", "Y",~
+## $ INSTRUMENT      <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ LAB_NUMBER      <chr> "S22507", "S22508", "S22509", "S22511", "S22510", "S22~
+## $ FIELD_NUMBER    <chr> "03553E", "03461E", "03542E", "02009E", "03291E", "036~
+## $ TYPE            <chr> "P", "P", "P", "P", "P", "P", "P", "P", "P", "P", "P",~
+## $ BLANK           <chr> "N", "N", "N", "Y", "N", "N", "N", "N", "N", "N", "N",~
+## $ TIME            <dbl> 426, 390, 415, NA, 422, 410, 137, 295, 145, 300, 300, ~
+## $ AIR_VOLUME      <dbl> 739.4082, 675.0900, 728.0345, NA, 736.9808, 714.2200, ~
+## $ WEIGHT          <dbl> 0.292, 0.217, 0.091, 0.000, 0.095, 0.428, 0.045, 2.123~
+## $ IMIS            <dbl> 9010, 9010, 9010, 9010, 9010, 9010, 9010, 9010, 9010, ~
+## $ SUBSTANCE       <chr> "SILICA, CRYSTALLINE QUARTZ (RESPIRABLE FRACTION)", "S~
+## $ RESULT          <dbl> 32, 29, 0, 0, 36, 38, 0, 22, 0, 23, 24, 0, 21, 18, 22,~
+## $ UOM             <chr> "%", "%", "%", "%", "%", "%", "%", "%", "%", "%", "%",~
+## $ QUALIFIER       <chr> NA, NA, "ND", "ND-BLK", NA, NA, "ND", NA, "ND", NA, NA~
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{head}\NormalTok{(quartz\_dat) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 23
+##   INSPECTION SAMPLING_NUMBER OFFICE ESTABLISHMENT             SIC  NAICS CSHO 
+##        <dbl> <chr>            <dbl> <chr>                   <dbl>  <dbl> <lgl>
+## 1    1349545 325911          830500 TELLURIDE STONE COMPANY    NA 327991 NA   
+## 2    1349545 325913          830500 TELLURIDE STONE COMPANY    NA 327991 NA   
+## 3    1349545 325915          830500 TELLURIDE STONE COMPANY    NA 327991 NA   
+## 4    1349545 325916          830500 TELLURIDE STONE COMPANY    NA 327991 NA   
+## 5    1349545 325916          830500 TELLURIDE STONE COMPANY    NA 327991 NA   
+## 6    1349545 325909          830500 TELLURIDE STONE COMPANY    NA 327991 NA   
+## # i 16 more variables: DATE_SAMPLED <chr>, DATE_REPORTED <chr>, EIGHTHR <chr>,
+## #   INSTRUMENT <chr>, LAB_NUMBER <chr>, FIELD_NUMBER <chr>, TYPE <chr>,
+## #   BLANK <chr>, TIME <dbl>, AIR_VOLUME <dbl>, WEIGHT <dbl>, IMIS <dbl>,
+## #   SUBSTANCE <chr>, RESULT <dbl>, UOM <chr>, QUALIFIER <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{tail}\NormalTok{(quartz\_dat)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 23
+##   INSPECTION SAMPLING_NUMBER OFFICE ESTABLISHMENT               SIC  NAICS CSHO 
+##        <dbl> <chr>            <dbl> <chr>                     <dbl>  <dbl> <lgl>
+## 1  304977119 914272620       830500 GRANITE MARBLE DESIGNS L~  3281 327991 NA   
+## 2  304977119 914272612       830500 GRANITE MARBLE DESIGNS L~  3281 327991 NA   
+## 3  304977119 914272604       830500 GRANITE MARBLE DESIGNS L~  3281 327991 NA   
+## 4  304977119 914272638       830500 GRANITE MARBLE DESIGNS L~  3281 327991 NA   
+## 5  304977119 914272638       830500 GRANITE MARBLE DESIGNS L~  3281 327991 NA   
+## 6  304977119 914272646       830500 GRANITE MARBLE DESIGNS L~  3281 327991 NA   
+## # i 16 more variables: DATE_SAMPLED <chr>, DATE_REPORTED <chr>, EIGHTHR <chr>,
+## #   INSTRUMENT <chr>, LAB_NUMBER <chr>, FIELD_NUMBER <chr>, TYPE <chr>,
+## #   BLANK <chr>, TIME <dbl>, AIR_VOLUME <dbl>, WEIGHT <dbl>, IMIS <dbl>,
+## #   SUBSTANCE <chr>, RESULT <dbl>, UOM <chr>, QUALIFIER <chr>
+\end{verbatim}
+
+\subsection{Reformatting using Clean\_OSHA
+Function}\label{reformatting-using-clean_osha-function}
+
+We can reuse our clean\_osha function here to have consistent column
+naming and cleaning rules:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust2 }\OtherTok{\textless{}{-}} \FunctionTok{clean\_osha}\NormalTok{(dust\_dat) }
+  
+\NormalTok{dust2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 2
+##   uom   `n()`
+##   <fct> <int>
+## 1 %         1
+## 2 AAAAA     2
+## 3 mg/m3  3633
+## 4 mg      251
+## 5 mcg       1
+## 6 <NA>      5
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{range}\NormalTok{(dust2}\SpecialCharTok{$}\NormalTok{year)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 2002 2026
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz2 }\OtherTok{\textless{}{-}}\FunctionTok{clean\_osha}\NormalTok{(quartz\_dat)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Filter Quartz for percentage
+measurements}\label{filter-quartz-for-percentage-measurements}
+
+We need to double check what the units of measurement and recorded
+numbers look like in this data.
+
+Fortunately, the variable for result is numeric, so we don't need to
+worry about the ``\textless{}'' measurements.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{nrow}\NormalTok{(quartz2)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 4672
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 2
+## # Groups:   uom [6]
+##   uom       n
+##   <fct> <int>
+## 1 %      4177
+## 2 AAAAA    11
+## 3 N         2
+## 4 mcg     326
+## 5 mg       20
+## 6 <NA>    136
+\end{verbatim}
+
+``AAAAA'' likely refers to the samples that had blanks or other
+problems.
+
+For our quartz data specifically, we want to retain only quartz fraction
+measurements expressed as percentages (\%). Exclude measurements in
+other units (mcg, mg, invalid codes) as these are not quartz fractions.
+
+Inclusion Criteria: Unit of Measurement (uom) == ``\%''
+
+Exclusion Reasons:
+
+AAAAA: Blanks or quality control issues N: Non-numeric/invalid codes
+mcg, mg: Wrong units for quartz fraction NA: Missing units
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{nrow}\NormalTok{(quartz2) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 4672
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz3 }\OtherTok{\textless{}{-}}\NormalTok{ quartz2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \StringTok{"\%"}\NormalTok{) }
+
+\FunctionTok{nrow}\NormalTok{(quartz3)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 4177
+\end{verbatim}
+
+We started with 4,672 observations, and excluded observations not
+pertaining to a \% (AAAAA: n =11, N: n = 2, mcg: n = 326, mg: n = 20,
+NA: n = 136). We now have 4,177 observations.
+
+We can also make sure to convert our result over to a percentage right
+now:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz3 }\OtherTok{\textless{}{-}}\NormalTok{ quartz3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{quartz\_pct =}\NormalTok{ result\_num}\SpecialCharTok{/}\DecValTok{100}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Filter Dust for Respirable Concentration in
+mg/m3}\label{filter-dust-for-respirable-concentration-in-mgm3}
+
+We need to retain only respirable dust measurements expressed in mg/m³.
+Convert to mcg/m³ for consistency with other exposure metrics.
+
+\textbf{Exclusion Reasons:}
+
+AAAAA: Quality control samples mg: Absolute mass (not concentration)
+mcg: Wrong unit for this measurement NA: Missing unit information
+
+We know that the result for dust is similar to the respirable silica
+dataset that included ``\textless{}'' measurements, so we will also need
+to create a numeric version of the results, making note of this in our
+results.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 2
+## # Groups:   uom [6]
+##   uom       n
+##   <fct> <int>
+## 1 %         1
+## 2 AAAAA     2
+## 3 mg/m3  3633
+## 4 mg      251
+## 5 mcg       1
+## 6 <NA>      5
+\end{verbatim}
+
+We are going to retain the data coded as mg/m3 as the measured
+concentration. Accordingly, we will subset our data:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{nrow}\NormalTok{(dust2) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 3893
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust3 }\OtherTok{\textless{}{-}}\NormalTok{ dust2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(uom }\SpecialCharTok{==} \StringTok{"mg/m3"}\NormalTok{) }
+
+\FunctionTok{nrow}\NormalTok{(dust3)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 3633
+\end{verbatim}
+
+We started with 3,893 observations, and excluded units of measurement of
+AAAAA (n =2), mg (n = 251), mcg (n =1), and NAs (n = 5). We now have
+3,633 observations.
+
+\#\#\#Convert to mcg/m3
+
+We are going to do our manual conversion to mcg from mg right now to
+keep things consistent:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust3 }\OtherTok{\textless{}{-}}\NormalTok{ dust3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{dust\_conc =}\NormalTok{ result\_num}\SpecialCharTok{*}\DecValTok{1000}\NormalTok{,}
+         \AttributeTok{dust\_uom =} \StringTok{"mcg/m3"}\NormalTok{) }
+\end{Highlighting}
+\end{Shaded}
+
+\#\#Establishment standard
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust3 }\OtherTok{\textless{}{-}}\NormalTok{ dust3 }\SpecialCharTok{|\textgreater{}} \FunctionTok{mutate}\NormalTok{(}\AttributeTok{establishment =} \FunctionTok{standardize\_establishment}\NormalTok{(establishment))}
+\NormalTok{quartz3 }\OtherTok{\textless{}{-}}\NormalTok{ quartz3 }\SpecialCharTok{|\textgreater{}} \FunctionTok{mutate}\NormalTok{(}\AttributeTok{establishment =} \FunctionTok{standardize\_establishment}\NormalTok{(establishment))}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Remove Blanks}\label{remove-blanks}
+
+We need to ensure that we don't have blank measurements in either the
+dust or quartz datasets:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(blank) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+## # Groups:   blank [2]
+##   blank     n
+##   <chr> <int>
+## 1 N      2775
+## 2 Y       858
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(blank }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(qualifier) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 2
+## # Groups:   qualifier [6]
+##   qualifier     n
+##   <chr>     <int>
+## 1 <=            2
+## 2 =<            1
+## 3 @             8
+## 4 ND          234
+## 5 ND-BLK        2
+## 6 <NA>       2528
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz3}\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(blank) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{()  }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+## # Groups:   blank [2]
+##   blank     n
+##   <chr> <int>
+## 1 N      3426
+## 2 Y       751
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(blank }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(qualifier) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 8 x 2
+## # Groups:   qualifier [8]
+##   qualifier     n
+##   <chr>     <int>
+## 1 <             3
+## 2 <=          177
+## 3 =<           49
+## 4 @            13
+## 5 BLK           2
+## 6 ND         1271
+## 7 ND-BLK        4
+## 8 <NA>       1907
+\end{verbatim}
+
+Real quick, let's look at that AAAAAA result:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(qualifier }\SpecialCharTok{==} \StringTok{"AAAAAA"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 23
+##   inspection sampling_number establishment       date_sampled eighthr lab_number
+##        <dbl> <chr>           <chr>               <date>       <chr>   <chr>     
+## 1  313880122 405081464       INTERNATIONAL STON~ 2010-12-03   N       D92467    
+## # i 17 more variables: field_number <chr>, type <fct>, blank <chr>, time <dbl>,
+## #   air_volume <dbl>, weight <dbl>, imis <dbl>, substance <chr>, result <dbl>,
+## #   uom <fct>, qualifier <chr>, year <dbl>, duration <chr>, lod <lgl>,
+## #   loq <lgl>, result_num <dbl>, quartz_pct <dbl>
+\end{verbatim}
+
+Looks like a legitimate result. Because of that, we will retain it in
+our study.
+
+We will move forward with removing the blank values and instances of
+blanks from the qualifier:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust4 }\OtherTok{\textless{}{-}}\NormalTok{ dust3 }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{filter}\NormalTok{(blank }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{,}
+         \SpecialCharTok{!}\FunctionTok{str\_detect}\NormalTok{(}\FunctionTok{coalesce}\NormalTok{(qualifier, }\StringTok{""}\NormalTok{), }\StringTok{"BLK"}\NormalTok{))}
+
+\NormalTok{quartz4 }\OtherTok{\textless{}{-}}\NormalTok{ quartz3 }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{filter}\NormalTok{(blank }\SpecialCharTok{==} \StringTok{"N"}\NormalTok{,}
+         \SpecialCharTok{!}\FunctionTok{str\_detect}\NormalTok{(}\FunctionTok{coalesce}\NormalTok{(qualifier, }\StringTok{""}\NormalTok{), }\StringTok{"BLK"}\NormalTok{))}
+
+\FunctionTok{nrow}\NormalTok{(dust4)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 2773
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{nrow}\NormalTok{(quartz4)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 3420
+\end{verbatim}
+
+\subsection{No duplicate samples}\label{no-duplicate-samples-1}
+
+We only want to retain values that have the same Lab No., and values
+that correspond to the same date sampled. We are going to join these two
+datasets based on lab\_number and date\_sampled to be sure that the
+joins correspond to the same day/sample. First, we are going to rename
+our results from these two datasets into ``dust\_conc'' and
+``quartz\_pct''.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust4 }\OtherTok{\textless{}{-}}\NormalTok{ dust4 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(lab\_number, date\_sampled, field\_number, sampling\_number, }
+\NormalTok{         establishment, type, eighthr, time, dust\_conc, dust\_uom, duration, lod, loq)}
+
+\NormalTok{quartz4 }\OtherTok{\textless{}{-}}\NormalTok{ quartz4 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(lab\_number, date\_sampled, field\_number, sampling\_number, establishment,}
+\NormalTok{          quartz\_pct, duration, lod, loq, time)}
+\end{Highlighting}
+\end{Shaded}
+
+Checks before joining:
+
+Does either table have duplicate lab\_number + date\_sampled +
+establishment + field\_number + result combos?
+
+Dust first:
+
+\#\#\#Dust
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#look at duplicates dust}
+\NormalTok{dust4\_duplicates }\OtherTok{\textless{}{-}}\NormalTok{ dust4 }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{group\_by}\NormalTok{(lab\_number, field\_number, dust\_conc, date\_sampled) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{n}\NormalTok{() }\SpecialCharTok{\textgreater{}} \DecValTok{1}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{ungroup}\NormalTok{() }
+
+\NormalTok{dust4\_duplicates }\SpecialCharTok{|\textgreater{}}  
+  \FunctionTok{arrange}\NormalTok{(lab\_number, field\_number, date\_sampled, establishment, dust\_conc) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(lab\_number, field\_number, date\_sampled, establishment, dust\_conc) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{head}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 5
+##   lab_number field_number date_sampled establishment                  dust_conc
+##   <chr>      <chr>        <date>       <chr>                              <dbl>
+## 1 F08985     00379D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       290
+## 2 F08985     00379D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       290
+## 3 F08986     00189D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       279
+## 4 F08986     00189D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       279
+## 5 F08987     03936D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       201
+## 6 F08987     03936D       2021-07-06   SUDBURY GRANITE AND MARBLE LLC       201
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#all variables }
+\NormalTok{dust4\_duplicates }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{arrange}\NormalTok{(lab\_number, field\_number, date\_sampled, establishment, dust\_conc) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{head}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 13
+##   lab_number date_sampled field_number sampling_number establishment       type 
+##   <chr>      <date>       <chr>        <chr>           <chr>               <fct>
+## 1 F08985     2021-07-06   00379D       381509          SUDBURY GRANITE AN~ Pers~
+## 2 F08985     2021-07-06   00379D       381509          SUDBURY GRANITE AN~ Pers~
+## 3 F08986     2021-07-06   00189D       381511          SUDBURY GRANITE AN~ Pers~
+## 4 F08986     2021-07-06   00189D       381511          SUDBURY GRANITE AN~ Pers~
+## 5 F08987     2021-07-06   03936D       381508          SUDBURY GRANITE AN~ Pers~
+## 6 F08987     2021-07-06   03936D       381508          SUDBURY GRANITE AN~ Pers~
+## # i 7 more variables: eighthr <chr>, time <dbl>, dust_conc <dbl>,
+## #   dust_uom <chr>, duration <chr>, lod <lgl>, loq <lgl>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust4\_dedup }\OtherTok{\textless{}{-}}\NormalTok{ dust4}\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{distinct}\NormalTok{(lab\_number, field\_number, dust\_conc, date\_sampled, }
+           \AttributeTok{.keep\_all =} \ConstantTok{TRUE}\NormalTok{) }
+
+\FunctionTok{nrow}\NormalTok{(dust4\_dedup) }\CommentTok{\#how many rows are left after deleting duplicates?   }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 2509
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust4\_dedup }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(loq }\SpecialCharTok{==} \ConstantTok{FALSE}\NormalTok{, }
+\NormalTok{         dust\_conc }\SpecialCharTok{==} \DecValTok{0}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 13
+##   lab_number date_sampled field_number sampling_number establishment       type 
+##   <chr>      <date>       <chr>        <chr>           <chr>               <fct>
+## 1 L12558     2011-12-08   994-1        435116421       TRIPLE D MARBLE AN~ Bulk 
+## 2 P47547     2004-02-23   X7910        434052213       GALLOY AND VAN ETT~ Pers~
+## # i 7 more variables: eighthr <chr>, time <dbl>, dust_conc <dbl>,
+## #   dust_uom <chr>, duration <chr>, lod <lgl>, loq <lgl>
+\end{verbatim}
+
+\#\#\#Quartz
+
+Next, quartz:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#look at duplicates quartz}
+\NormalTok{quartz4\_duplicates }\OtherTok{\textless{}{-}}\NormalTok{ quartz4 }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{group\_by}\NormalTok{(lab\_number, field\_number, quartz\_pct, date\_sampled) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{n}\NormalTok{() }\SpecialCharTok{\textgreater{}} \DecValTok{1}\NormalTok{) }\SpecialCharTok{|\textgreater{}}
+  \FunctionTok{ungroup}\NormalTok{() }
+
+\NormalTok{quartz4\_duplicates }\SpecialCharTok{|\textgreater{}}  
+  \FunctionTok{arrange}\NormalTok{(lab\_number, field\_number, date\_sampled, establishment, quartz\_pct) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(lab\_number, field\_number, date\_sampled, establishment, quartz\_pct) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{head}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 5
+##   lab_number field_number date_sampled establishment               quartz_pct
+##   <chr>      <chr>        <date>       <chr>                            <dbl>
+## 1 L99057     04296E       2017-01-20   ENVIRONMENTAL MATERIALS LLC       0   
+## 2 L99057     04296E       2017-01-20   ENVIRONMENTAL MATERIALS LLC       0   
+## 3 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC          0.21
+## 4 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC          0.21
+## 5 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC             0.19
+## 6 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC             0.19
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#all variables }
+\NormalTok{quartz4\_duplicates }\SpecialCharTok{|\textgreater{}}   
+  \FunctionTok{arrange}\NormalTok{(lab\_number, field\_number, date\_sampled, establishment, quartz\_pct) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{head}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 10
+##   lab_number date_sampled field_number sampling_number establishment  quartz_pct
+##   <chr>      <date>       <chr>        <chr>           <chr>               <dbl>
+## 1 L99057     2017-01-20   04296E       260127          ENVIRONMENTAL~       0   
+## 2 L99057     2017-01-20   04296E       260127          ENVIRONMENTAL~       0   
+## 3 L99461     2017-01-24   00846C       260349          STONES AND DE~       0.21
+## 4 L99461     2017-01-24   00846C       260349          STONES AND DE~       0.21
+## 5 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF~       0.19
+## 6 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF~       0.19
+## # i 4 more variables: duration <chr>, lod <lgl>, loq <lgl>, time <dbl>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz4\_dedup }\OtherTok{\textless{}{-}}\NormalTok{ quartz4}\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{distinct}\NormalTok{(lab\_number, field\_number, quartz\_pct, date\_sampled, time,}
+           \AttributeTok{.keep\_all =} \ConstantTok{TRUE}\NormalTok{) }
+
+\FunctionTok{nrow}\NormalTok{(quartz4\_dedup) }\CommentTok{\#how many rows are left after deleting duplicates?  }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 3329
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz4\_dedup }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(loq }\SpecialCharTok{==} \ConstantTok{FALSE}\NormalTok{, }
+\NormalTok{         quartz\_pct}\SpecialCharTok{==}\DecValTok{0}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{pull}\NormalTok{(field\_number)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##  [1] "0646B" "Y7235" "Y7039" "Y7040" "Y7026" "Y5533" "Z6215" "Z3725" "Z8441"
+## [10] "Z6592" "Z6425" "Z6289" "Z4227" "Z3786" "Z3739" "OS-2"  "Z3392" "Z3325"
+## [19] "Y4193"
+\end{verbatim}
+
+\textbf{NOTE}: when we performed this, we lost some information about
+different spellings of the establishments. This will likely come up
+again as being problematic when we merge with the other respirable
+silica dataset. Something to be aware of in the future.
+
+\subsection{Removing unnecessary
+columns}\label{removing-unnecessary-columns}
+
+We are only going to retain the join keys and quartz pct before merging
+with dust:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# Remove unnecessary columns}
+\NormalTok{quartz\_merge }\OtherTok{\textless{}{-}}\NormalTok{ quartz4\_dedup }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(lab\_number, field\_number, quartz\_pct, lod, loq, duration)}
+
+\CommentTok{\#removing the hyphen part after number}
+\NormalTok{dust\_merge }\OtherTok{\textless{}{-}}\NormalTok{ dust4\_dedup }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{sampling\_number =} \FunctionTok{word}\NormalTok{(sampling\_number, }\DecValTok{1}\NormalTok{, }\AttributeTok{sep =} \StringTok{"{-}"}\NormalTok{))  }
+
+\FunctionTok{glimpse}\NormalTok{(dust\_merge) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Rows: 2,509
+## Columns: 13
+## $ lab_number      <chr> "65868", "65871", "65872", "64207", "64209", "63663", ~
+## $ date_sampled    <date> 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16, 2026-~
+## $ field_number    <chr> "00775F", "00641F", "00235F", "04715D", "01043H", "097~
+## $ sampling_number <chr> "494572", "494575", "494578", "492231", "492232", "492~
+## $ establishment   <chr> "DELPHOS GRANITE WORKS INC", "DELPHOS GRANITE WORKS IN~
+## $ type            <fct> Personal, Personal, Personal, Personal, Personal, Pers~
+## $ eighthr         <chr> "N", "N", "N", "Y", "Y", "N", "N", "N", "N", "Y", "Y",~
+## $ time            <dbl> 479, 434, 429, 390, 390, 444, 462, 452, 453, 290, 278,~
+## $ dust_conc       <dbl> 109, 124, 278, 1090, 514, 126, 107, 203, 111, 1060, 91~
+## $ dust_uom        <chr> "mcg/m3", "mcg/m3", "mcg/m3", "mcg/m3", "mcg/m3", "mcg~
+## $ duration        <chr> "Long-Term", "Long-Term", "Long-Term", "Long-Term", "L~
+## $ lod             <lgl> TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, ~
+## $ loq             <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE~
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{glimpse}\NormalTok{(quartz\_merge) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Rows: 3,329
+## Columns: 6
+## $ lab_number   <chr> "S22507", "S22508", "S22509", "S22510", "S22506", "S22392~
+## $ field_number <chr> "03553E", "03461E", "03542E", "03291E", "03637E", "02839D~
+## $ quartz_pct   <dbl> 0.32, 0.29, 0.00, 0.36, 0.38, 0.00, 0.22, 0.00, 0.23, 0.2~
+## $ lod          <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, F~
+## $ loq          <lgl> FALSE, FALSE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, FALS~
+## $ duration     <chr> "Long-Term", "Long-Term", "Long-Term", "Long-Term", "Long~
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{quartz\_merge }\OtherTok{\textless{}{-}}\NormalTok{ quartz4\_dedup }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(lab\_number, field\_number, quartz\_pct, lod, loq, date\_sampled, time)}
+
+
+\NormalTok{merged\_dust\_quartz }\OtherTok{\textless{}{-}}\NormalTok{ quartz\_merge }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{inner\_join}\NormalTok{(dust\_merge, }\AttributeTok{by =} \FunctionTok{c}\NormalTok{(}\StringTok{"field\_number"}\NormalTok{),}
+             \AttributeTok{relationship =} \StringTok{"one{-}to{-}one"}\NormalTok{,}
+             \AttributeTok{suffix =} \FunctionTok{c}\NormalTok{(}\StringTok{"\_qtz"}\NormalTok{, }\StringTok{"\_dust"}\NormalTok{))}
+
+
+\CommentTok{\#checking how many didn\textquotesingle{}t match: }
+\NormalTok{quartz\_merge}\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{anti\_join}\NormalTok{(dust\_merge, }\AttributeTok{by =} \FunctionTok{c}\NormalTok{(}\StringTok{"field\_number"}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{nrow}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 2121
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dust\_merge}\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{anti\_join}\NormalTok{(quartz\_merge, }\AttributeTok{by =} \FunctionTok{c}\NormalTok{(}\StringTok{"field\_number"}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{nrow}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 1301
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{nrow}\NormalTok{(merged\_dust\_quartz) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 1208
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{glimpse}\NormalTok{(merged\_dust\_quartz) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Rows: 1,208
+## Columns: 19
+## $ lab_number_qtz    <chr> "S22507", "S22508", "S22509", "S22510", "S22506", "S~
+## $ field_number      <chr> "03553E", "03461E", "03542E", "03291E", "03637E", "0~
+## $ quartz_pct        <dbl> 0.32, 0.29, 0.00, 0.36, 0.38, 0.00, 0.22, 0.00, 0.23~
+## $ lod_qtz           <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FAL~
+## $ loq_qtz           <lgl> FALSE, FALSE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE,~
+## $ date_sampled_qtz  <date> 2018-09-26, 2018-09-26, 2018-09-26, 2018-09-26, 201~
+## $ time_qtz          <dbl> 426, 390, 415, 422, 410, 137, 295, 145, 300, 300, 14~
+## $ lab_number_dust   <chr> "S22507", "S22508", "S22509", "S22510", "S22506", "S~
+## $ date_sampled_dust <date> 2018-09-26, 2018-09-26, 2018-09-26, 2018-09-26, 201~
+## $ sampling_number   <chr> "325911", "325913", "325915", "325916", "325909", "3~
+## $ establishment     <chr> "TELLURIDE STONE COMPANY", "TELLURIDE STONE COMPANY"~
+## $ type              <fct> Personal, Personal, Personal, Personal, Personal, Pe~
+## $ eighthr           <chr> "N", "N", "N", "N", "N", "Y", "Y", "Y", "Y", "Y", "Y~
+## $ time_dust         <dbl> 426, 390, 415, 422, 410, 137, 295, 145, 300, 300, 14~
+## $ dust_conc         <dbl> 395, 321, 125, 129, 599, 193, 4233, 110, 4237, 1120,~
+## $ dust_uom          <chr> "mcg/m3", "mcg/m3", "mcg/m3", "mcg/m3", "mcg/m3", "m~
+## $ duration          <chr> "Long-Term", "Long-Term", "Long-Term", "Long-Term", ~
+## $ lod_dust          <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FAL~
+## $ loq_dust          <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FAL~
+\end{verbatim}
+
+Let's do a check to make sure that all the durations and dates match up:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{merged\_check }\OtherTok{\textless{}{-}}\NormalTok{ merged\_dust\_quartz }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}
+    \AttributeTok{date\_match =} \FunctionTok{as.Date}\NormalTok{(date\_sampled\_qtz) }\SpecialCharTok{==} \FunctionTok{as.Date}\NormalTok{(date\_sampled\_dust),}
+    \AttributeTok{dur\_match  =}\NormalTok{ (}\FunctionTok{as.numeric}\NormalTok{(time\_qtz) }\SpecialCharTok{==} \FunctionTok{as.numeric}\NormalTok{(time\_dust))}
+\NormalTok{  )}
+
+\CommentTok{\# Checking that all the dates match}
+\NormalTok{merged\_check }\SpecialCharTok{|\textgreater{}} \FunctionTok{count}\NormalTok{(date\_match, dur\_match)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 3
+##   date_match dur_match     n
+##   <lgl>      <lgl>     <int>
+## 1 TRUE       TRUE       1208
+\end{verbatim}
+
+They are the same! Great news, that means we can retain just one of the
+variables for each:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{merged\_dust\_quartz }\OtherTok{\textless{}{-}}\NormalTok{  merged\_dust\_quartz }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{lod\_dust, }\SpecialCharTok{{-}}\NormalTok{loq\_dust, }\SpecialCharTok{{-}}\NormalTok{lab\_number\_dust, }\SpecialCharTok{{-}}\NormalTok{date\_sampled\_dust) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{rename}\NormalTok{(}\AttributeTok{lod =}\NormalTok{ lod\_qtz,}
+         \AttributeTok{loq =}\NormalTok{ loq\_qtz,}
+         \AttributeTok{time =}\NormalTok{ time\_qtz,}
+         \AttributeTok{date\_sampled =}\NormalTok{ date\_sampled\_qtz, }
+         \AttributeTok{lab\_number =}\NormalTok{ lab\_number\_qtz)  }
+
+\CommentTok{\#whoops }
+\NormalTok{merged\_dust\_quartz }\OtherTok{\textless{}{-}}\NormalTok{  merged\_dust\_quartz }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{time\_dust) }
+\end{Highlighting}
+\end{Shaded}
+
+Let's perform our calculation to get the official silica concentration,
+and add a variable for the year:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{merged\_dust\_quartz2 }\OtherTok{\textless{}{-}}\NormalTok{ merged\_dust\_quartz }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{silica\_conc =}\NormalTok{ dust\_conc}\SpecialCharTok{*}\NormalTok{quartz\_pct,}
+         \AttributeTok{year =} \FunctionTok{year}\NormalTok{(date\_sampled)) }
+
+\NormalTok{merged\_dust\_quartz2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\AttributeTok{mean =} \FunctionTok{mean}\NormalTok{(silica\_conc),}\AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(silica\_conc)) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 2
+##    mean    sd
+##   <dbl> <dbl>
+## 1  138.  499.
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#by year: }
+\NormalTok{merged\_dust\_quartz2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(year) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarize}\NormalTok{(}\AttributeTok{mean =} \FunctionTok{mean}\NormalTok{(silica\_conc),}\AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(silica\_conc)) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 14 x 3
+##     year  mean     sd
+##    <dbl> <dbl>  <dbl>
+##  1  2004   0      0  
+##  2  2006  67.2  150. 
+##  3  2007 713.  1521. 
+##  4  2008  20.6   29.8
+##  5  2009  62.1  175. 
+##  6  2010 307.   809. 
+##  7  2011  89.1  235. 
+##  8  2012 148.   474. 
+##  9  2013 202.   803. 
+## 10  2014  82.3  187. 
+## 11  2015  85.2  174. 
+## 12  2016 146.   590. 
+## 13  2017  77.2  141. 
+## 14  2018 169.   364.
+\end{verbatim}
+
+\#\#Personal Measures
+
+We need to ensure that we are only retaining measurements that are
+personal:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{merged\_dust\_quartz2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(type) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+## # Groups:   type [2]
+##   type         n
+##   <fct>    <int>
+## 1 Area         6
+## 2 Personal  1202
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{merged\_dust\_quartz3 }\OtherTok{\textless{}{-}}\NormalTok{ merged\_dust\_quartz2}\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(type }\SpecialCharTok{==} \StringTok{"Personal"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Contains time data}\label{contains-time-data-1}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{merged\_dust\_quartz3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(duration) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}\FunctionTok{n}\NormalTok{()) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 4 x 2
+##   duration    `n()`
+##   <chr>       <int>
+## 1 Long-Term     476
+## 2 Medium-Term   582
+## 3 Short-Term    128
+## 4 Task-Based     16
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{merged\_dust\_quartz4 }\OtherTok{\textless{}{-}}\NormalTok{ merged\_dust\_quartz3}\SpecialCharTok{|\textgreater{}} 
+ \FunctionTok{filter}\NormalTok{(}\SpecialCharTok{!}\NormalTok{(}\FunctionTok{is.na}\NormalTok{(duration)))}
+\FunctionTok{nrow}\NormalTok{(merged\_dust\_quartz4)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 1202
+\end{verbatim}
+
+\section{Merge Respirable and Calculated
+data}\label{merge-respirable-and-calculated-data}
+
+Lastly, we need to merge our quartz and dust datasets with the
+respirable dataset. Before we do this, we need to make sure we include
+only the relevant variables, as well as make a consistent respirable
+concentration variable that only has results in mcg/m3.
+
+Variables to add from merged\_dust\_quarts: imis (val = 9010\_9130) To
+drop: quartz\_pct, dust\_conc, dust\_uom.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{merged\_dust\_quartz5 }\OtherTok{\textless{}{-}}\NormalTok{ merged\_dust\_quartz4 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{quartz\_pct, }\SpecialCharTok{{-}}\NormalTok{dust\_conc, }\SpecialCharTok{{-}}\NormalTok{dust\_uom) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{imis =} \StringTok{"9010\_9130"}\NormalTok{) }
+
+\NormalTok{dat7 }\OtherTok{\textless{}{-}}\NormalTok{ dat7 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{imis =} \FunctionTok{as.character}\NormalTok{(imis))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\OtherTok{\textless{}{-}} \FunctionTok{bind\_rows}\NormalTok{(dat7, merged\_dust\_quartz5)}
+\FunctionTok{nrow}\NormalTok{(combined\_dat) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 2496
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{glimpse}\NormalTok{(combined\_dat) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Rows: 2,496
+## Columns: 14
+## $ sampling_number <chr> "494572-OIS", "494575-OIS", "494578-OIS", "492231-OIS"~
+## $ establishment   <chr> "DELPHOS GRANITE WORKS INC", "DELPHOS GRANITE WORKS IN~
+## $ date_sampled    <date> 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16, 2026-~
+## $ lab_number      <chr> "65868", "65871", "65872", "64207", "64209", "63660", ~
+## $ field_number    <chr> "00775F", "00641F", "00235F", "04715D", "01043H", "093~
+## $ time            <dbl> 479, 434, 429, 390, 390, 452, 452, 453, 453, 444, 444,~
+## $ duration        <chr> "Long-Term", "Long-Term", "Long-Term", "Long-Term", "L~
+## $ imis            <chr> "9000", "9000", "9000", "9000", "9000", "9000", "9000"~
+## $ year            <dbl> 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, ~
+## $ silica_conc     <dbl> 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9~
+## $ lod             <lgl> TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, TRU~
+## $ loq             <lgl> FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE~
+## $ type            <fct> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+## $ eighthr         <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA~
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(silica\_conc }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{(imis)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+##   imis          n
+##   <chr>     <int>
+## 1 9000        432
+## 2 9010_9130   577
+\end{verbatim}
+
+\#Data check
+
+We want to see how many observations we have per year, as well as check
+for potential outliers:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{summary}\NormalTok{(combined\_dat}\SpecialCharTok{$}\NormalTok{silica\_conc)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+##    0.00    0.00   20.95  119.11   77.85 7372.80
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Q1 }\OtherTok{\textless{}{-}} \FunctionTok{quantile}\NormalTok{(combined\_dat}\SpecialCharTok{$}\NormalTok{silica\_conc, }\FloatTok{0.25}\NormalTok{, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{)}
+\NormalTok{Q3 }\OtherTok{\textless{}{-}} \FunctionTok{quantile}\NormalTok{(combined\_dat}\SpecialCharTok{$}\NormalTok{silica\_conc, }\FloatTok{0.75}\NormalTok{, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{)}
+\NormalTok{IQR\_value }\OtherTok{\textless{}{-}} \FunctionTok{IQR}\NormalTok{(combined\_dat}\SpecialCharTok{$}\NormalTok{silica\_conc, }\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{)}
+
+\NormalTok{lower\_bound }\OtherTok{\textless{}{-}}\NormalTok{ Q1 }\SpecialCharTok{{-}} \FloatTok{1.5} \SpecialCharTok{*}\NormalTok{ IQR\_value}
+\NormalTok{upper\_bound }\OtherTok{\textless{}{-}}\NormalTok{ Q3 }\SpecialCharTok{+} \FloatTok{1.5} \SpecialCharTok{*}\NormalTok{ IQR\_value}
+
+\NormalTok{lower\_bound}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##      25% 
+## -116.775
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{upper\_bound }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##     75% 
+## 194.625
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{outliers }\OtherTok{\textless{}{-}}\NormalTok{ combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(silica\_conc }\SpecialCharTok{\textless{}}\NormalTok{ lower\_bound }\SpecialCharTok{|}\NormalTok{ silica\_conc }\SpecialCharTok{\textgreater{}}\NormalTok{ upper\_bound)}
+
+\NormalTok{outliers }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 302 x 14
+##    sampling_number establishment      date_sampled lab_number field_number  time
+##    <chr>           <chr>              <date>       <chr>      <chr>        <dbl>
+##  1 492231-OIS      CELTIC STONE GRAN~ 2026-04-16   64207      04715D         390
+##  2 492232-OIS      CELTIC STONE GRAN~ 2026-04-16   64209      01043H         390
+##  3 492098-OIS      TNT SERVICES CORP  2026-04-14   63665      09352H         278
+##  4 491870-OIS      REVIVAL STONE AND~ 2026-04-09   63184      06873H         442
+##  5 490584-OIS      PINTER MEMORIALS ~ 2026-03-23   62026      06521H         268
+##  6 489132-OIS      BURTON MONUMENT C~ 2026-03-03   60470      NJ-1           249
+##  7 487773-OIS      GRANITE MASTERS O~ 2026-02-11   59210      02970H         353
+##  8 485532-OIS      JONES STONE AND M~ 2026-01-07   57566      00956D         373
+##  9 484848-OIS      BAY AREA GRANITE ~ 2025-12-17   56952      08000H          14
+## 10 484900-OIS      GRANITE USA        2025-12-17   56967      5B2            225
+## # i 292 more rows
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice\_max}\NormalTok{(silica\_conc, }\AttributeTok{n =} \DecValTok{5}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 5 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 230024          LIBRESTONE MARBLE ~ 2016-01-06   L83025     07203C           2
+## 2 145617          STONE SYSTEMS OF N~ 2013-06-27   L41648     9086A           90
+## 3 401767322       ALLIED STONE INC    2007-09-12   D35799     Q818           240
+## 4 914219159       KOL MARBLE AND GRA~ 2010-10-14   D89461     X0545          261
+## 5 16999           DIXIE GRANITE CO I~ 2012-04-26   L21419     1417A          152
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+For our outliers, we want to be certain that none of these started as a
+different unit of measurement. We will compare with our original
+database:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{outlier\_field\_no }\OtherTok{\textless{}{-}}\NormalTok{ combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice\_max}\NormalTok{(silica\_conc, }\AttributeTok{n =} \DecValTok{5}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{pull}\NormalTok{(field\_number)  }
+
+\NormalTok{outlier\_field\_no }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] "07203C" "9086A"  "Q818"   "X0545"  "1417A"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{\%in\%}\NormalTok{ outlier\_field\_no) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(uom, result\_num, eighthr) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 0 x 3
+## # i 3 variables: uom <fct>, result_num <dbl>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(eighthr) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 3 x 2
+## # Groups:   eighthr [3]
+##   eighthr     n
+##   <chr>   <int>
+## 1 N        1030
+## 2 Y         172
+## 3 <NA>     1294
+\end{verbatim}
+
+Ok, all of these started off as mcg/m3 interestingly. We cannot chalk it
+up to being incorrect measurement classification.
+
+Let's also check real quick that no observations are duplicates:
+(ignoring the non-detects, this time)
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{duplicated}\NormalTok{(combined\_dat) }\SpecialCharTok{|} \FunctionTok{duplicated}\NormalTok{(combined\_dat, }\AttributeTok{fromLast =} \ConstantTok{TRUE}\NormalTok{)) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{arrange}\NormalTok{(field\_number) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{print}\NormalTok{(}\AttributeTok{n =} \ConstantTok{Inf}\NormalTok{) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 0 x 14
+## # i 14 variables: sampling_number <chr>, establishment <chr>,
+## #   date_sampled <date>, lab_number <chr>, field_number <chr>, time <dbl>,
+## #   duration <chr>, imis <chr>, year <dbl>, silica_conc <dbl>, lod <lgl>,
+## #   loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dup\_profile }\OtherTok{\textless{}{-}}\NormalTok{ combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(loq }\SpecialCharTok{==} \ConstantTok{FALSE}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(field\_number) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{n}\NormalTok{() }\SpecialCharTok{\textgreater{}} \DecValTok{1}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{n\_rows      =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{n\_results   =} \FunctionTok{n\_distinct}\NormalTok{(silica\_conc),}
+    \AttributeTok{n\_imis      =} \FunctionTok{n\_distinct}\NormalTok{(imis),}
+    \AttributeTok{n\_lab       =} \FunctionTok{n\_distinct}\NormalTok{(lab\_number),}
+    \AttributeTok{n\_sampling  =} \FunctionTok{n\_distinct}\NormalTok{(sampling\_number),}
+    \AttributeTok{n\_dates     =} \FunctionTok{n\_distinct}\NormalTok{(date\_sampled),}
+    \AttributeTok{n\_times     =} \FunctionTok{n\_distinct}\NormalTok{(time),}
+    \AttributeTok{n\_lod       =} \FunctionTok{n\_distinct}\NormalTok{(lod),}
+    \AttributeTok{.groups =} \StringTok{"drop"}
+\NormalTok{  ) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{arrange}\NormalTok{(}\FunctionTok{desc}\NormalTok{(n\_rows)) }
+\FunctionTok{print}\NormalTok{(dup\_profile)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 44 x 9
+##    field_number n_rows n_results n_imis n_lab n_sampling n_dates n_times n_lod
+##    <chr>         <int>     <int>  <int> <int>      <int>   <int>   <int> <int>
+##  1 00195E            2         2      2     1          1       1       1     1
+##  2 00464E            2         2      2     1          1       1       1     1
+##  3 02653E            2         2      2     1          1       1       1     1
+##  4 02835E            2         2      2     1          1       1       1     1
+##  5 02855D            2         2      2     1          1       1       1     1
+##  6 02857D            2         2      2     1          1       1       1     1
+##  7 03015E            2         2      2     1          1       1       1     1
+##  8 03283D            2         2      2     1          1       1       1     1
+##  9 03289D            2         2      2     1          1       1       1     1
+## 10 03291E            2         2      2     1          1       1       1     1
+## # i 34 more rows
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"00195E"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)  }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 279417          HALQUIST STONE COM~ 2017-09-14   S09590     00195E         131
+## 2 279417          HALQUIST STONE COM~ 2017-09-14   S09590     00195E         131
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"00464E"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 279417          HALQUIST STONE COM~ 2017-09-14   S09591     00464E         185
+## 2 279417          HALQUIST STONE COM~ 2017-09-14   S09591     00464E         185
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"02653E"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment date_sampled lab_number field_number  time
+##   <chr>           <chr>         <date>       <chr>      <chr>        <dbl>
+## 1 281477          RID STONE INC 2017-10-11   S10378     02653E         404
+## 2 281477          RID STONE INC 2017-10-11   S10378     02653E         404
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"02835E"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 287071          JONES STONE AND MA~ 2017-12-13   S12518     02835E         387
+## 2 287071          JONES STONE AND MA~ 2017-12-13   S12518     02835E         387
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"02855D"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 325676          RIVER GRANITE COMP~ 2018-09-20   S22393     02855D         300
+## 2 325676          RIVER GRANITE COMP~ 2018-09-20   S22393     02855D         300
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"09710H"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 492088-OIS      CL SERVICES AND DI~ 2026-04-15   63663      09710H         444
+## 2 492088-OIS      CL SERVICES AND DI~ 2026-04-15   63663      09710H         444
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#how different are they }
+\NormalTok{dup\_diffs }\OtherTok{\textless{}{-}}\NormalTok{ combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(loq }\SpecialCharTok{==} \ConstantTok{FALSE}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(field\_number) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{n}\NormalTok{() }\SpecialCharTok{==} \DecValTok{2}\NormalTok{,            }
+         \FunctionTok{n\_distinct}\NormalTok{(lab\_number) }\SpecialCharTok{==} \DecValTok{1}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{r\_low        =} \FunctionTok{min}\NormalTok{(silica\_conc),}
+    \AttributeTok{r\_high       =} \FunctionTok{max}\NormalTok{(silica\_conc),}
+    \AttributeTok{abs\_diff     =}\NormalTok{ r\_high }\SpecialCharTok{{-}}\NormalTok{ r\_low,}
+    \AttributeTok{pair\_mean    =} \FunctionTok{mean}\NormalTok{(silica\_conc),}
+    \AttributeTok{rel\_diff\_pct =} \DecValTok{100} \SpecialCharTok{*}\NormalTok{ abs\_diff }\SpecialCharTok{/}\NormalTok{ pair\_mean,}
+    \AttributeTok{any\_lod      =} \FunctionTok{any}\NormalTok{(lod),}
+    \AttributeTok{.groups =} \StringTok{"drop"}
+\NormalTok{  )}
+\NormalTok{dup\_diffs}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 44 x 7
+##    field_number r_low r_high abs_diff pair_mean rel_diff_pct any_lod
+##    <chr>        <dbl>  <dbl>    <dbl>     <dbl>        <dbl> <lgl>  
+##  1 00195E        86.8   87.0   0.222       86.9        0.255 FALSE  
+##  2 00464E        94.6   95     0.357       94.8        0.376 FALSE  
+##  3 02653E        18.4   18.5   0.0500      18.5        0.271 FALSE  
+##  4 02835E       162    165.    2.64       163.         1.62  FALSE  
+##  5 02855D       269.   274     5.20       271.         1.92  FALSE  
+##  6 02857D       948    951.    2.62       949.         0.276 FALSE  
+##  7 03015E       290    296.    5.64       293.         1.93  FALSE  
+##  8 03283D       931.   947    15.7        939.         1.68  FALSE  
+##  9 03289D       195    197.    2.19       196.         1.12  FALSE  
+## 10 03291E        46.1   46.4   0.340       46.3        0.735 FALSE  
+## # i 34 more rows
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#retaining just the 9000 imis in the instances where some observations have everything the same except for that  }
+
+\NormalTok{duplicate\_fields }\OtherTok{\textless{}{-}}\NormalTok{ dup\_profile }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(n\_imis }\SpecialCharTok{==} \DecValTok{2}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{pull}\NormalTok{(field\_number)}
+ 
+
+\NormalTok{combined\_dat2 }\OtherTok{\textless{}{-}}\NormalTok{ combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\SpecialCharTok{!}\NormalTok{(field\_number }\SpecialCharTok{\%in\%}\NormalTok{ duplicate\_fields }\SpecialCharTok{\&}\NormalTok{ imis }\SpecialCharTok{==} \StringTok{"9010\_9130"}\NormalTok{)) }
+
+\CommentTok{\# How many rows were removed? }
+\FunctionTok{nrow}\NormalTok{(combined\_dat) }\SpecialCharTok{{-}} \FunctionTok{nrow}\NormalTok{(combined\_dat2) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 39
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#how many remain that are duplicates still?}
+
+\NormalTok{dup\_profile2 }\OtherTok{\textless{}{-}}\NormalTok{ combined\_dat2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(loq }\SpecialCharTok{==} \ConstantTok{FALSE}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(field\_number) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(}\FunctionTok{n}\NormalTok{() }\SpecialCharTok{\textgreater{}} \DecValTok{1}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{summarise}\NormalTok{(}
+    \AttributeTok{n\_rows      =} \FunctionTok{n}\NormalTok{(),}
+    \AttributeTok{n\_results   =} \FunctionTok{n\_distinct}\NormalTok{(silica\_conc),}
+    \AttributeTok{n\_imis      =} \FunctionTok{n\_distinct}\NormalTok{(imis),}
+    \AttributeTok{n\_lab       =} \FunctionTok{n\_distinct}\NormalTok{(lab\_number),}
+    \AttributeTok{n\_sampling  =} \FunctionTok{n\_distinct}\NormalTok{(sampling\_number),}
+    \AttributeTok{n\_dates     =} \FunctionTok{n\_distinct}\NormalTok{(date\_sampled),}
+    \AttributeTok{n\_times     =} \FunctionTok{n\_distinct}\NormalTok{(time),}
+    \AttributeTok{n\_lod       =} \FunctionTok{n\_distinct}\NormalTok{(lod),}
+    \AttributeTok{.groups =} \StringTok{"drop"}
+\NormalTok{  ) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{arrange}\NormalTok{(}\FunctionTok{desc}\NormalTok{(n\_rows)) }
+\FunctionTok{print}\NormalTok{(dup\_profile2) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 5 x 9
+##   field_number n_rows n_results n_imis n_lab n_sampling n_dates n_times n_lod
+##   <chr>         <int>     <int>  <int> <int>      <int>   <int>   <int> <int>
+## 1 06497H            2         2      1     1          1       1       1     1
+## 2 09237H            2         2      1     1          1       1       1     1
+## 3 09358H            2         2      1     1          1       1       1     2
+## 4 09488H            2         2      1     1          1       1       1     1
+## 5 09710H            2         2      1     1          1       1       1     1
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"06497H"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 490582-OIS      PINTER MEMORIALS I~ 2026-03-23   62022      06497H          60
+## 2 490582-OIS      PINTER MEMORIALS I~ 2026-03-23   62022      06497H          60
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"09237H"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 490748-OIS      L AND M MARBLE AND~ 2026-03-26   62233      09237H         230
+## 2 490748-OIS      L AND M MARBLE AND~ 2026-03-26   62233      09237H         230
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"09358H"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 492086-OIS      CL SERVICES AND DI~ 2026-04-15   63660      09358H         452
+## 2 492086-OIS      CL SERVICES AND DI~ 2026-04-15   63660      09358H         452
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"09488H"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 492087-OIS      CL SERVICES AND DI~ 2026-04-15   63662      09488H         453
+## 2 492087-OIS      CL SERVICES AND DI~ 2026-04-15   63662      09488H         453
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(field\_number }\SpecialCharTok{==} \StringTok{"09710H"}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{slice}\NormalTok{(}\DecValTok{1}\SpecialCharTok{:}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 492088-OIS      CL SERVICES AND DI~ 2026-04-15   63663      09710H         444
+## 2 492088-OIS      CL SERVICES AND DI~ 2026-04-15   63663      09710H         444
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+Hallelujah: all the remaining duplicates in our data are from 2026. This
+is something to note for the future: data from 2026 are a MESS.
+Reporting has not improved.
+
+Let's also double check on our 0 issue from before:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(loq }\SpecialCharTok{==} \ConstantTok{FALSE}\NormalTok{, }
+\NormalTok{         silica\_conc }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 1 x 1
+##       n
+##   <int>
+## 1     6
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat2 }\SpecialCharTok{|\textgreater{}} 
+    \FunctionTok{filter}\NormalTok{(loq }\SpecialCharTok{==} \ConstantTok{FALSE}\NormalTok{, }
+\NormalTok{         silica\_conc }\SpecialCharTok{==} \DecValTok{0}\NormalTok{) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 435662515       CNC STONECRAFT OF ~ 2007-08-07   D34176     Z6425          467
+## 2 435662499       CNC STONECRAFT OF ~ 2007-08-07   D34177     Z6289          431
+## 3 435662507       CNC STONECRAFT OF ~ 2007-08-07   D34179     Z4227           52
+## 4 435662507       CNC STONECRAFT OF ~ 2007-08-07   D34178     Z3786          419
+## 5 914266838       STAR MARBLE AND GR~ 2006-11-14   D22225     Z3392           75
+## 6 914266838       STAR MARBLE AND GR~ 2006-11-14   D22226     Z3325          134
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+To be frank, I'm not sure what to do about these. There's only 6 0's,
+but from an examination of them, I can't figure out what is wrong with
+the measurements to make this be the result. They are all from the
+generated data, which means that the respirable dust fraction would have
+had to have been 0. They aren't below the level of quantification, they
+aren't non-detects\ldots{} they did come from earlier on in the study
+period, so I suppose it is possible that the rigor of reporting/sampling
+improved.
+
+Here are the respirable dust observations that was 0 earlier on from
+data cleaning: X7910 And for quartz: ``0646B'' ``Y7235'' ``Y7039''
+``Y7040'' ``Y7026'' ``Y5533'' ``Z6215'' ``Z3725'' ``Z8441'' ``Z6592''
+``Z6425'' ``Z6289'' ``Z4227'' {[}14{]} ``Z3786'' ``Z3739'' ``OS-2''
+``Z3392'' ``Z3325'' ``Y4193''
+
+Let's see what's present:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{zeros }\OtherTok{\textless{}{-}} \FunctionTok{c}\NormalTok{(}\StringTok{"X7910"}\NormalTok{, }\StringTok{"0646B"}\NormalTok{, }\StringTok{"Y7235"}\NormalTok{, }\StringTok{"Y7039"}\NormalTok{ ,}\StringTok{"Y7040"}\NormalTok{ ,}\StringTok{"Y7026"}\NormalTok{ ,}\StringTok{"Y5533"}\NormalTok{, }\StringTok{"Z6215"}\NormalTok{ ,}\StringTok{"Z3725"}\NormalTok{, }\StringTok{"Z8441"}\NormalTok{ ,}\StringTok{"Z6592"}\NormalTok{, }\StringTok{"Z6425"}\NormalTok{ ,}\StringTok{"Z6289"}\NormalTok{, }\StringTok{"Z4227"}\NormalTok{,}
+\StringTok{"Z3786"}\NormalTok{, }\StringTok{"Z3739"}\NormalTok{ ,}\StringTok{"OS{-}2"}\NormalTok{,  }\StringTok{"Z3392"}\NormalTok{ ,}\StringTok{"Z3325"}\NormalTok{, }\StringTok{"Y4193"}\NormalTok{) }
+
+\NormalTok{combined\_dat2 }\SpecialCharTok{|\textgreater{}} 
+    \FunctionTok{filter}\NormalTok{(loq }\SpecialCharTok{==} \ConstantTok{FALSE}\NormalTok{, }
+\NormalTok{         silica\_conc }\SpecialCharTok{==} \DecValTok{0}\NormalTok{,}
+\NormalTok{         field\_number }\SpecialCharTok{\%in\%}\NormalTok{ zeros) }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 6 x 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   <chr>           <chr>               <date>       <chr>      <chr>        <dbl>
+## 1 435662515       CNC STONECRAFT OF ~ 2007-08-07   D34176     Z6425          467
+## 2 435662499       CNC STONECRAFT OF ~ 2007-08-07   D34177     Z6289          431
+## 3 435662507       CNC STONECRAFT OF ~ 2007-08-07   D34179     Z4227           52
+## 4 435662507       CNC STONECRAFT OF ~ 2007-08-07   D34178     Z3786          419
+## 5 914266838       STAR MARBLE AND GR~ 2006-11-14   D22225     Z3392           75
+## 6 914266838       STAR MARBLE AND GR~ 2006-11-14   D22226     Z3325          134
+## # i 8 more variables: duration <chr>, imis <chr>, year <dbl>,
+## #   silica_conc <dbl>, lod <lgl>, loq <lgl>, type <fct>, eighthr <chr>
+\end{verbatim}
+
+All 6 of these observations correspond to instances where the quartz
+fraction was 0\%. Let's just make note of this for later.
+
+\section{Excluding samples from 2026}\label{excluding-samples-from-2026}
+
+How many are from 2026?
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(year }\SpecialCharTok{==} \DecValTok{2026}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{nrow}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 92
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat3 }\OtherTok{\textless{}{-}}\NormalTok{ combined\_dat2 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{filter}\NormalTok{(year }\SpecialCharTok{\textless{}} \DecValTok{2026}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\#\#How many are non-detects?
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{group\_by}\NormalTok{(loq) }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{count}\NormalTok{() }
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 2 x 2
+## # Groups:   loq [2]
+##   loq       n
+##   <lgl> <int>
+## 1 FALSE  1362
+## 2 TRUE   1003
+\end{verbatim}
+
+We don't need the ``type'' variable, we can get rid of it:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{combined\_dat3 }\OtherTok{\textless{}{-}}\NormalTok{ combined\_dat3 }\SpecialCharTok{|\textgreater{}} 
+  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{type)}
+\end{Highlighting}
+\end{Shaded}
+
+Let's save our analytic dataset:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{write\_csv}\NormalTok{(combined\_dat3, }\StringTok{"../CleanData/study\_dat.csv"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
 
 \end{document}

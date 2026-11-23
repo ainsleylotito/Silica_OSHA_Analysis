@@ -1,15 +1,18 @@
 ---
 title: "01_Cleaning"
 output:
+  word_document:
+    toc: true
+    toc_depth: '3'
   html_document:
     toc: true
     toc_depth: 3
     number_sections: true
-    toc_float: true 
-    code_folding: hide  
+    toc_float: true
+    code_folding: hide
   pdf_document:
     toc: true
-    toc_depth: '3' 
+    toc_depth: '3'
 output_dir: Output
 --- 
 ```{r setup, include = FALSE}
@@ -42,7 +45,7 @@ New variables created during the cleaning process, as well as a description of a
 
 3. Add OEL data, create variable that states whether observed sample is above or below.   
 
-#IMIS 9000 data
+# IMIS 9000 data
 
 ## Data Import and Initial Examination
 
@@ -1150,8 +1153,19 @@ All 6 of these observations correspond to instances where the quartz fraction wa
 
 # Excluding samples from 2026 
 
+
+How many are from 2026? 
+
 ```{r}
-combined_dat3 <- combined_dat |> 
+combined_dat2 |> 
+  filter(year == 2026) %>% 
+  nrow()
+
+```
+
+
+```{r}
+combined_dat3 <- combined_dat2 |> 
   filter(year < 2026)
 ```
 

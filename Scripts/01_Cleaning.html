@@ -1589,9 +1589,11 @@ excel file <code>DataDictionary.xlsx</code>.</p>
 <li><p>Add OEL data, create variable that states whether observed sample
 is above or below.</p></li>
 </ol>
-<p>#IMIS 9000 data</p>
-<div id="data-import-and-initial-examination" class="section level2" number="1.1">
-<h2><span class="header-section-number">1.1</span> Data Import and
+</div>
+<div id="imis-9000-data" class="section level1" number="2">
+<h1><span class="header-section-number">2</span> IMIS 9000 data</h1>
+<div id="data-import-and-initial-examination" class="section level2" number="2.1">
+<h2><span class="header-section-number">2.1</span> Data Import and
 Initial Examination</h2>
 <pre class="r"><code>raw_dat &lt;- read_delim(&quot;../RawData/Respirable_Silica_Data.txt&quot;, delim = &quot;|&quot;,
            col_types = cols(Result = col_character())) 
@@ -1620,6 +1622,15 @@ analysis of some kind or just have the knowledge that they were less
 than that number.</p>
 <p>To start, let’s simply apply some reformats to our data. We will make
 this a function to save time later:</p>
+<p><em>A quick update as of 11/13/2026:</em></p>
+<p><em>Upon further investigation, I found that the
+<code>qualifier</code> variable was being read in incorrectly due to the
+fact that it was the last one in each line of the txt file. we kept
+having trailing sequences of <code>\t\t\t\t</code>, indicating that a
+bunch of tabs were being read in. For some reason, the data had training
+tabs at the end. So we are going to remove those trailing tabs in the
+function, which will clean up our qualifier variable
+considerably.</em></p>
 <pre class="r"><code>clean_osha &lt;- function(df){
   df |&gt; 
     rename_with(tolower) |&gt; 
@@ -1638,7 +1649,7 @@ this a function to save time later:</p>
                           &quot;mcg/m3&quot; = &quot;MCG/M3&quot;, #micrograms/m3
                           &quot;mg/m3&quot; = &quot;MG_M3&quot;, #milligrams/m3
                           &quot;mg/m3&quot; = &quot;M&quot;), #milligrams/m3
-    blank = as.logical(blank),
+    across(qualifier, ~ na_if(str_squish(.x), &quot;&quot;)),
     duration = case_when(
   time &lt;= 30                  ~ &quot;Task-Based&quot;,
   time &gt;= 31  &amp; time &lt;= 120   ~ &quot;Short-Term&quot;,
@@ -1647,14 +1658,15 @@ this a function to save time later:</p>
   TRUE                        ~ NA_character_
 ),
     lod = grepl(&quot;^\\s*&lt;&quot;, result),
+ loq = grepl(&quot;ND&quot;, qualifier),
     result_num = as.numeric(gsub(&quot;&lt;\\s*&quot;, &quot;&quot;, result))
     ) |&gt; 
-  select(-office, -naics, -date_reported, -csho, -sic, -instrument, -blank) 
+  select(-office, -naics, -date_reported, -csho, -sic, -instrument) 
 }
 dat &lt;- clean_osha(raw_dat)  
 
-head(dat) </code></pre>
-<pre><code>## # A tibble: 6 × 20
+head(dat)  </code></pre>
+<pre><code>## # A tibble: 6 × 22
 ##   inspection sampling_number establishment       date_sampled eighthr lab_number
 ##        &lt;dbl&gt; &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;   &lt;chr&gt;     
 ## 1    1892548 494572-OIS      DELPHOS GRANITE WO… 2026-05-14   N       65868     
@@ -1663,10 +1675,12 @@ head(dat) </code></pre>
 ## 4    1892548 494579-OIS      DELPHOS GRANITE WO… 2026-05-14   &lt;NA&gt;    65869     
 ## 5    1892548 494575-OIS      DELPHOS GRANITE WO… 2026-05-14   &lt;NA&gt;    65869     
 ## 6    1892548 494578-OIS      DELPHOS GRANITE WO… 2026-05-14   &lt;NA&gt;    65869     
-## # ℹ 14 more variables: field_number &lt;chr&gt;, type &lt;fct&gt;, time &lt;dbl&gt;,
+## # ℹ 16 more variables: field_number &lt;chr&gt;, type &lt;fct&gt;, blank &lt;chr&gt;, time &lt;dbl&gt;,
 ## #   air_volume &lt;dbl&gt;, weight &lt;dbl&gt;, imis &lt;dbl&gt;, substance &lt;chr&gt;, result &lt;chr&gt;,
 ## #   uom &lt;fct&gt;, qualifier &lt;chr&gt;, year &lt;dbl&gt;, duration &lt;chr&gt;, lod &lt;lgl&gt;,
-## #   result_num &lt;dbl&gt;</code></pre>
+## #   loq &lt;lgl&gt;, result_num &lt;dbl&gt;</code></pre>
+<pre class="r"><code>unique(dat$qualifier)</code></pre>
+<pre><code>## [1] NA       &quot;ND&quot;     &quot;ND-BLK&quot; &quot;@&quot;      &quot;BLK&quot;    &quot;&lt;=&quot;     &quot;=&lt;&quot;</code></pre>
 <pre class="r"><code>dat |&gt; 
   filter(result_num == 0) |&gt; 
   nrow()</code></pre>
@@ -1692,8 +1706,8 @@ dat |&gt;
 ##   min_nonzero
 ##         &lt;dbl&gt;
 ## 1        0.01</code></pre>
-<div id="examination" class="section level3" number="1.1.1">
-<h3><span class="header-section-number">1.1.1</span> Examination</h3>
+<div id="examination" class="section level3" number="2.1.1">
+<h3><span class="header-section-number">2.1.1</span> Examination</h3>
 <p>Let’s first see how many years our data spans:</p>
 <pre class="r"><code>range(dat$date_sampled)</code></pre>
 <pre><code>## [1] &quot;2017-08-18&quot; &quot;2026-05-14&quot;</code></pre>
@@ -1735,7 +1749,7 @@ instances correspond to an air volume value. If they are all complete,
 we will need to look into converting the air volume (liters) to meters
 cubed.</p>
 <pre class="r"><code>dat |&gt; 
-  filter(uom == c(&quot;M&quot;, &quot;MG&quot;, &quot;X&quot;, &quot;Y&quot;)) |&gt; 
+  filter(uom == c(&quot;mg/m3&quot;, &quot;mcg/m3&quot;, &quot;mg&quot;, &quot;mcg&quot;)) |&gt; 
   select(uom, air_volume) |&gt;
   group_by(uom) |&gt;
   summarise(
@@ -1743,9 +1757,13 @@ cubed.</p>
     non_na_values = sum(!is.na(air_volume)),
     na_count = sum(is.na(air_volume))
   )</code></pre>
-<pre><code>## # A tibble: 0 × 4
-## # ℹ 4 variables: uom &lt;fct&gt;, total_rows &lt;int&gt;, non_na_values &lt;int&gt;,
-## #   na_count &lt;int&gt;</code></pre>
+<pre><code>## # A tibble: 4 × 4
+##   uom    total_rows non_na_values na_count
+##   &lt;fct&gt;       &lt;int&gt;         &lt;int&gt;    &lt;int&gt;
+## 1 mg/m3          76            73        3
+## 2 mcg/m3        298           284       14
+## 3 mg             74             0       74
+## 4 mcg            59             0       59</code></pre>
 <p>It appears that we have some data that is missing air volume
 specifically. We will need to double check which rows are missing air
 volume after we exclude non-personal samples, and then look into
@@ -1852,8 +1870,8 @@ that adds a cluster-specific random effect to the linear predictor. Our
 cluster variable will be id.</p>
 </div>
 </div>
-<div id="unit-of-measurement-consistency" class="section level2" number="1.2">
-<h2><span class="header-section-number">1.2</span> Unit of Measurement
+<div id="unit-of-measurement-consistency" class="section level2" number="2.2">
+<h2><span class="header-section-number">2.2</span> Unit of Measurement
 Consistency</h2>
 <p>We need to make sure we are only using reported results under one
 standard unit of measurement.</p>
@@ -1888,8 +1906,8 @@ be sure to exclude them from the sample. We are also going to plan on
 doing a sensitivity analysis on the observations that have no uom but
 are time-weighted; we cannot be sure what units these are in, so we can
 add them back in later and see whether things change significantly.</p>
-<div id="comparing-mg-to-mcg" class="section level3" number="1.2.1">
-<h3><span class="header-section-number">1.2.1</span> Comparing mg to
+<div id="comparing-mg-to-mcg" class="section level3" number="2.2.1">
+<h3><span class="header-section-number">2.2.1</span> Comparing mg to
 mcg</h3>
 <p>Before we convert all our units, let’s do a check to see how the
 different concentrations differ:</p>
@@ -1925,8 +1943,8 @@ the mg/m3 observations:</p>
 ## 1 &lt;NA&gt;        271</code></pre>
 </div>
 </div>
-<div id="establishment-standardization" class="section level2" number="1.3">
-<h2><span class="header-section-number">1.3</span> Establishment
+<div id="establishment-standardization" class="section level2" number="2.3">
+<h2><span class="header-section-number">2.3</span> Establishment
 standardization</h2>
 <p>Now that we have our datasets for respirable silica and our
 calculated versions, we need to prepare for the merge by deleting
@@ -1946,15 +1964,15 @@ field_number entries caused by inconsistent spelling.</p>
 
 dat &lt;- dat |&gt; mutate(establishment = standardize_establishment(establishment)) </code></pre>
 </div>
-<div id="inclusionexclusion" class="section level2" number="1.4">
-<h2><span class="header-section-number">1.4</span>
+<div id="inclusionexclusion" class="section level2" number="2.4">
+<h2><span class="header-section-number">2.4</span>
 Inclusion/Exclusion</h2>
 <p>To begin, let’s see how many observations we have:</p>
 <pre class="r"><code>nrow(dat)</code></pre>
 <pre><code>## [1] 2135</code></pre>
 <p>We are starting with 2,135.</p>
-<div id="correct-measurement" class="section level3" number="1.4.1">
-<h3><span class="header-section-number">1.4.1</span> Correct
+<div id="correct-measurement" class="section level3" number="2.4.1">
+<h3><span class="header-section-number">2.4.1</span> Correct
 Measurement</h3>
 <p>We need our data to record a legitimate recorded measurement. First,
 we will check to see what the samples are recorded as when they are
@@ -1979,8 +1997,8 @@ measurement. As such we will have to delete these observations.</p>
   filter(!is.na(result_num))</code></pre>
 <p>After removal, we now have 2,050 observations.</p>
 </div>
-<div id="removing-samples-lacking-concentration-data" class="section level3" number="1.4.2">
-<h3><span class="header-section-number">1.4.2</span> Removing samples
+<div id="removing-samples-lacking-concentration-data" class="section level3" number="2.4.2">
+<h3><span class="header-section-number">2.4.2</span> Removing samples
 lacking concentration data</h3>
 <p>We are only going to retain samples that contain clear units
 standardized to air volume. We cannot convert our observations to a
@@ -2018,40 +2036,58 @@ consistent variable name for later, called “silica_conc”:</p>
 <pre class="r"><code>dat3 &lt;- dat3 |&gt; 
   mutate(silica_conc = result_num)</code></pre>
 </div>
-<div id="no-blank-samples" class="section level3" number="1.4.3">
-<h3><span class="header-section-number">1.4.3</span> No blank
+<div id="no-blank-samples" class="section level3" number="2.4.3">
+<h3><span class="header-section-number">2.4.3</span> No blank
 samples</h3>
 <p>Next we will exclude all samples that were recorded as blank.</p>
+<p>In this case, we only have samples that are coded as BOTH non-detect
+and blanks, rather than just blank alone. Because of this, we will
+retain all of the observations.</p>
 <pre class="r"><code>dat3 |&gt; 
   group_by(qualifier) |&gt; 
+  count()  </code></pre>
+<pre><code>## # A tibble: 6 × 2
+## # Groups:   qualifier [6]
+##   qualifier     n
+##   &lt;chr&gt;     &lt;int&gt;
+## 1 &lt;=            9
+## 2 =&lt;            1
+## 3 @            13
+## 4 ND          479
+## 5 ND-BLK       74
+## 6 &lt;NA&gt;        902</code></pre>
+<pre class="r"><code>dat3 |&gt; 
+  group_by(qualifier,loq) |&gt; 
   count() </code></pre>
-<pre><code>## # A tibble: 9 × 2
-## # Groups:   qualifier [9]
-##   qualifier      n
-##   &lt;chr&gt;      &lt;int&gt;
-## 1 &quot;&lt;=&quot;           8
-## 2 &quot;&lt;=\t&quot;         1
-## 3 &quot;=&lt;&quot;           1
-## 4 &quot;@&quot;           13
-## 5 &quot;ND&quot;         463
-## 6 &quot;ND\t&quot;        16
-## 7 &quot;ND-BLK&quot;      71
-## 8 &quot;ND-BLK\t&quot;     3
-## 9  &lt;NA&gt;        902</code></pre>
+<pre><code>## # A tibble: 6 × 3
+## # Groups:   qualifier, loq [6]
+##   qualifier loq       n
+##   &lt;chr&gt;     &lt;lgl&gt; &lt;int&gt;
+## 1 &lt;=        FALSE     9
+## 2 =&lt;        FALSE     1
+## 3 @         FALSE    13
+## 4 ND        TRUE    479
+## 5 ND-BLK    TRUE     74
+## 6 &lt;NA&gt;      FALSE   902</code></pre>
+<pre class="r"><code>dat3 |&gt; 
+  group_by(blank) |&gt; 
+  count()</code></pre>
+<pre><code>## # A tibble: 2 × 2
+## # Groups:   blank [2]
+##   blank     n
+##   &lt;chr&gt; &lt;int&gt;
+## 1 N      1401
+## 2 Y        77</code></pre>
 <pre class="r"><code>dat4 &lt;- dat3 |&gt; 
-  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND&quot;, &quot;ND\t&quot;)))</code></pre>
-<p>We gave removed blank samples (n =1), samples that were recorded as
-both ND (LOQ) and Blank (n = 368), those recorded as ND, Blank/t (n =3),
-ND samples (n = 463), and those recorded as ND/t (n=3).</p>
-<p>We now have 928 observations.</p>
+  filter(blank == &quot;N&quot;) </code></pre>
 </div>
-<div id="no-duplicate-samples" class="section level3" number="1.4.4">
-<h3><span class="header-section-number">1.4.4</span> No duplicate
+<div id="no-duplicate-samples" class="section level3" number="2.4.4">
+<h3><span class="header-section-number">2.4.4</span> No duplicate
 samples</h3>
 <p>We need to ensure that we don’t have duplicate samples in the
 data.</p>
 <pre class="r"><code>nrow(dat4) #how many rows in data?  </code></pre>
-<pre><code>## [1] 928</code></pre>
+<pre><code>## [1] 1401</code></pre>
 <pre class="r"><code>#look at duplicates 
 dat4_duplicates &lt;- dat4 |&gt;
   group_by(lab_number, field_number, silica_conc, date_sampled) |&gt;
@@ -2068,34 +2104,36 @@ dat4_duplicates |&gt;
 ## 2 F30196     08368D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…        43.9
 ## 3 F30195     01581D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…       214  
 ## 4 F30196     08368D       2023-11-02   OZARK MOUNTAIN GRANITE AND T…        43.9
-## 5 F30068     02203E       2023-11-01   WC CANNIFF AND SONS INC             101  
-## 6 F30068     02203E       2023-11-01   W C CANNIFF AND SONS INC            101</code></pre>
+## 5 F30067     07870E       2023-11-01   W C CANNIFF AND SONS INC              0  
+## 6 F30067     07870E       2023-11-01   WC CANNIFF AND SONS INC               0</code></pre>
+<pre class="r"><code>nrow(dat4_duplicates)</code></pre>
+<pre><code>## [1] 196</code></pre>
 <pre class="r"><code>#all variables 
 dat4_duplicates |&gt;   
   head()</code></pre>
-<pre><code>## # A tibble: 6 × 21
+<pre><code>## # A tibble: 6 × 23
 ##   inspection sampling_number establishment       date_sampled eighthr lab_number
 ##        &lt;dbl&gt; &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;   &lt;chr&gt;     
 ## 1    1690207 433379          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30195    
 ## 2    1690207 433380          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30196    
 ## 3    1690207 433379          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30195    
 ## 4    1690207 433380          OZARK MOUNTAIN GRA… 2023-11-02   Y       F30196    
-## 5    1694359 433303          WC CANNIFF AND SON… 2023-11-01   Y       F30068    
-## 6    1694359 433303          W C CANNIFF AND SO… 2023-11-01   Y       F30068    
-## # ℹ 15 more variables: field_number &lt;chr&gt;, type &lt;fct&gt;, time &lt;dbl&gt;,
+## 5    1694359 433269          W C CANNIFF AND SO… 2023-11-01   Y       F30067    
+## 6    1694359 433269          WC CANNIFF AND SON… 2023-11-01   Y       F30067    
+## # ℹ 17 more variables: field_number &lt;chr&gt;, type &lt;fct&gt;, blank &lt;chr&gt;, time &lt;dbl&gt;,
 ## #   air_volume &lt;dbl&gt;, weight &lt;dbl&gt;, imis &lt;dbl&gt;, substance &lt;chr&gt;, result &lt;chr&gt;,
 ## #   uom &lt;chr&gt;, qualifier &lt;chr&gt;, year &lt;dbl&gt;, duration &lt;chr&gt;, lod &lt;lgl&gt;,
-## #   result_num &lt;dbl&gt;, silica_conc &lt;dbl&gt;</code></pre>
+## #   loq &lt;lgl&gt;, result_num &lt;dbl&gt;, silica_conc &lt;dbl&gt;</code></pre>
 <pre class="r"><code>dat4_dedup &lt;- dat4|&gt; 
   distinct(lab_number, field_number, silica_conc, date_sampled, 
            .keep_all = TRUE) 
 
 nrow(dat4_dedup) #how many rows are left after deleting duplicates? </code></pre>
-<pre><code>## [1] 872</code></pre>
+<pre><code>## [1] 1303</code></pre>
 <p>After removing duplicates, we have 872 observations.</p>
 </div>
-<div id="only-personal-measurements" class="section level3" number="1.4.5">
-<h3><span class="header-section-number">1.4.5</span> Only Personal
+<div id="only-personal-measurements" class="section level3" number="2.4.5">
+<h3><span class="header-section-number">2.4.5</span> Only Personal
 Measurements</h3>
 <p>We only want to retain personal measurements for this analysis:</p>
 <pre class="r"><code>dat4_dedup |&gt; 
@@ -2105,37 +2143,35 @@ Measurements</h3>
 ## # Groups:   type [2]
 ##   type         n
 ##   &lt;fct&gt;    &lt;int&gt;
-## 1 Area         7
-## 2 Personal   865</code></pre>
+## 1 Area         9
+## 2 Personal  1294</code></pre>
 <pre class="r"><code>dat5 &lt;- dat4_dedup |&gt; 
   filter(type == &quot;Personal&quot;)</code></pre>
 <p>We are left with 865 observations after removing 7 area
 measurements.</p>
 </div>
-<div id="contains-time-data" class="section level3" number="1.4.6">
-<h3><span class="header-section-number">1.4.6</span> Contains time
+<div id="contains-time-data" class="section level3" number="2.4.6">
+<h3><span class="header-section-number">2.4.6</span> Contains time
 data</h3>
 <p>We need to ensure that we have measurements that were taken contain
 data for time.</p>
 <pre class="r"><code>dat5 |&gt; 
   group_by(duration) |&gt; 
   summarise(n()) </code></pre>
-<pre><code>## # A tibble: 5 × 2
+<pre><code>## # A tibble: 4 × 2
 ##   duration    `n()`
 ##   &lt;chr&gt;       &lt;int&gt;
-## 1 Long-Term     439
-## 2 Medium-Term   372
-## 3 Short-Term     48
-## 4 Task-Based      3
-## 5 &lt;NA&gt;            3</code></pre>
+## 1 Long-Term     561
+## 2 Medium-Term   625
+## 3 Short-Term     98
+## 4 Task-Based     10</code></pre>
 <pre class="r"><code>dat6 &lt;- dat5 |&gt; 
   filter(!(is.na(duration)))</code></pre>
 <p>3 are missing time data.</p>
-<p>After excluding NAs, we are left with 862 measurements.</p>
 <p>Let’s check and see how many observations we have:</p>
 <pre class="r"><code>glimpse(dat6) </code></pre>
-<pre><code>## Rows: 862
-## Columns: 21
+<pre><code>## Rows: 1,294
+## Columns: 23
 ## $ inspection      &lt;dbl&gt; 1892548, 1892548, 1892548, 1875265, 1875265, 1887587, …
 ## $ sampling_number &lt;chr&gt; &quot;494572-OIS&quot;, &quot;494575-OIS&quot;, &quot;494578-OIS&quot;, &quot;492231-OIS&quot;…
 ## $ establishment   &lt;chr&gt; &quot;DELPHOS GRANITE WORKS INC&quot;, &quot;DELPHOS GRANITE WORKS IN…
@@ -2144,6 +2180,7 @@ data for time.</p>
 ## $ lab_number      &lt;chr&gt; &quot;65868&quot;, &quot;65871&quot;, &quot;65872&quot;, &quot;64207&quot;, &quot;64209&quot;, &quot;63660&quot;, …
 ## $ field_number    &lt;chr&gt; &quot;00775F&quot;, &quot;00641F&quot;, &quot;00235F&quot;, &quot;04715D&quot;, &quot;01043H&quot;, &quot;093…
 ## $ type            &lt;fct&gt; Personal, Personal, Personal, Personal, Personal, Pers…
+## $ blank           &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;,…
 ## $ time            &lt;dbl&gt; 479, 434, 429, 390, 390, 452, 452, 453, 453, 444, 444,…
 ## $ air_volume      &lt;dbl&gt; 785.5600, 720.4400, 707.8500, 659.1000, 663.0000, 777.…
 ## $ weight          &lt;dbl&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…
@@ -2155,22 +2192,32 @@ data for time.</p>
 ## $ year            &lt;dbl&gt; 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, …
 ## $ duration        &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;L…
 ## $ lod             &lt;lgl&gt; TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, TRU…
+## $ loq             &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE…
 ## $ result_num      &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9…
 ## $ silica_conc     &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9…</code></pre>
 <p>Quick check for result numeric equal to 0 :</p>
 <pre class="r"><code>dat6 |&gt; 
   filter(result_num == 0) |&gt; 
-  nrow()</code></pre>
-<pre><code>## [1] 0</code></pre>
+  nrow() </code></pre>
+<pre><code>## [1] 432</code></pre>
+<pre class="r"><code>dat6 |&gt; 
+  filter(result_num == 0) |&gt; 
+  group_by(loq) |&gt; 
+  count()</code></pre>
+<pre><code>## # A tibble: 1 × 2
+## # Groups:   loq [1]
+##   loq       n
+##   &lt;lgl&gt; &lt;int&gt;
+## 1 TRUE    432</code></pre>
 <p>Let’s clean up our data too, only retaining the variables we
 need:</p>
 <pre class="r"><code>dat7 &lt;- dat6 |&gt; 
-  select(sampling_number, establishment, date_sampled, lab_number, field_number, time, duration, imis, year, silica_conc, lod)</code></pre>
+  select(sampling_number, establishment, date_sampled, lab_number, field_number, time, duration, imis, year, silica_conc, lod, loq)</code></pre>
 </div>
 </div>
 </div>
-<div id="imis-9130-and-9010-data-import" class="section level1" number="2">
-<h1><span class="header-section-number">2</span> IMIS 9130 and 9010 Data
+<div id="imis-9130-and-9010-data-import" class="section level1" number="3">
+<h1><span class="header-section-number">3</span> IMIS 9130 and 9010 Data
 Import</h1>
 <p>Next, we need to import the data pertaining to the other two codes.
 We need to be certain that the samples match with each other (matching
@@ -2288,8 +2335,8 @@ glimpse(quartz_dat)</code></pre>
 ## #   INSTRUMENT &lt;chr&gt;, LAB_NUMBER &lt;chr&gt;, FIELD_NUMBER &lt;chr&gt;, TYPE &lt;chr&gt;,
 ## #   BLANK &lt;chr&gt;, TIME &lt;dbl&gt;, AIR_VOLUME &lt;dbl&gt;, WEIGHT &lt;dbl&gt;, IMIS &lt;dbl&gt;,
 ## #   SUBSTANCE &lt;chr&gt;, RESULT &lt;dbl&gt;, UOM &lt;chr&gt;, QUALIFIER &lt;chr&gt;</code></pre>
-<div id="reformatting-using-clean_osha-function" class="section level2" number="2.1">
-<h2><span class="header-section-number">2.1</span> Reformatting using
+<div id="reformatting-using-clean_osha-function" class="section level2" number="3.1">
+<h2><span class="header-section-number">3.1</span> Reformatting using
 Clean_OSHA Function</h2>
 <p>We can reuse our clean_osha function here to have consistent column
 naming and cleaning rules:</p>
@@ -2311,8 +2358,8 @@ dust2 |&gt;
 <pre><code>## [1] 2002 2026</code></pre>
 <pre class="r"><code>quartz2 &lt;-clean_osha(quartz_dat)</code></pre>
 </div>
-<div id="filter-quartz-for-percentage-measurements" class="section level2" number="2.2">
-<h2><span class="header-section-number">2.2</span> Filter Quartz for
+<div id="filter-quartz-for-percentage-measurements" class="section level2" number="3.2">
+<h2><span class="header-section-number">3.2</span> Filter Quartz for
 percentage measurements</h2>
 <p>We need to double check what the units of measurement and recorded
 numbers look like in this data.</p>
@@ -2358,8 +2405,8 @@ right now:</p>
 <pre class="r"><code>quartz3 &lt;- quartz3 |&gt; 
   mutate(quartz_pct = result_num/100)</code></pre>
 </div>
-<div id="filter-dust-for-respirable-concentration-in-mgm3" class="section level2" number="2.3">
-<h2><span class="header-section-number">2.3</span> Filter Dust for
+<div id="filter-dust-for-respirable-concentration-in-mgm3" class="section level2" number="3.3">
+<h2><span class="header-section-number">3.3</span> Filter Dust for
 Respirable Concentration in mg/m3</h2>
 <p>We need to retain only respirable dust measurements expressed in
 mg/m³. Convert to mcg/m³ for consistency with other exposure
@@ -2406,93 +2453,89 @@ keep things consistent:</p>
 <pre class="r"><code>dust3 &lt;- dust3 |&gt; mutate(establishment = standardize_establishment(establishment))
 quartz3 &lt;- quartz3 |&gt; mutate(establishment = standardize_establishment(establishment))</code></pre>
 </div>
-<div id="remove-blanks" class="section level2" number="2.4">
-<h2><span class="header-section-number">2.4</span> Remove Blanks</h2>
+<div id="remove-blanks" class="section level2" number="3.4">
+<h2><span class="header-section-number">3.4</span> Remove Blanks</h2>
 <p>We need to ensure that we don’t have blank measurements in either the
 dust or quartz datasets:</p>
 <pre class="r"><code>dust3 |&gt; 
+  group_by(blank) |&gt; 
+  count() </code></pre>
+<pre><code>## # A tibble: 2 × 2
+## # Groups:   blank [2]
+##   blank     n
+##   &lt;chr&gt; &lt;int&gt;
+## 1 N      2775
+## 2 Y       858</code></pre>
+<pre class="r"><code>dust3 |&gt; 
+  filter(blank == &quot;N&quot;) |&gt; 
   group_by(qualifier) |&gt; 
   count()</code></pre>
-<pre><code>## # A tibble: 15 × 2
-## # Groups:   qualifier [15]
-##    qualifier              n
-##    &lt;chr&gt;              &lt;int&gt;
-##  1 &quot;\t\t\t\t&quot;            78
-##  2 &quot;\t\t\t\t\t&quot;          62
-##  3 &quot;&lt;=&quot;                   2
-##  4 &quot;=&lt;&quot;                   1
-##  5 &quot;@&quot;                    8
-##  6 &quot;BLK&quot;                295
-##  7 &quot;BLK\t\t\t\t&quot;          4
-##  8 &quot;BLK\t\t\t\t\t&quot;        5
-##  9 &quot;ND&quot;                 232
-## 10 &quot;ND\t\t\t\t&quot;           3
-## 11 &quot;ND\t\t\t\t\t&quot;         8
-## 12 &quot;ND-BLK&quot;             506
-## 13 &quot;ND-BLK\t\t\t\t&quot;      22
-## 14 &quot;ND-BLK\t\t\t\t\t&quot;    18
-## 15  &lt;NA&gt;               2389</code></pre>
+<pre><code>## # A tibble: 6 × 2
+## # Groups:   qualifier [6]
+##   qualifier     n
+##   &lt;chr&gt;     &lt;int&gt;
+## 1 &lt;=            2
+## 2 =&lt;            1
+## 3 @             8
+## 4 ND          234
+## 5 ND-BLK        2
+## 6 &lt;NA&gt;       2528</code></pre>
 <pre class="r"><code>quartz3|&gt; 
+  group_by(blank) |&gt; 
+  count()  </code></pre>
+<pre><code>## # A tibble: 2 × 2
+## # Groups:   blank [2]
+##   blank     n
+##   &lt;chr&gt; &lt;int&gt;
+## 1 N      3426
+## 2 Y       751</code></pre>
+<pre class="r"><code>quartz3 |&gt; 
+  filter(blank == &quot;N&quot;) |&gt; 
   group_by(qualifier) |&gt; 
-  count() </code></pre>
-<pre><code>## # A tibble: 17 × 2
-## # Groups:   qualifier [17]
-##    qualifier            n
-##    &lt;chr&gt;            &lt;int&gt;
-##  1 &quot;\t\t\t&quot;            44
-##  2 &quot;\t\t\t\t&quot;          26
-##  3 &quot;&lt;&quot;                  3
-##  4 &quot;&lt;=&quot;               159
-##  5 &quot;&lt;=\t\t\t&quot;          10
-##  6 &quot;&lt;=\t\t\t\t&quot;         8
-##  7 &quot;=&lt;&quot;                49
-##  8 &quot;@&quot;                 13
-##  9 &quot;AAAAAA&quot;             1
-## 10 &quot;BLK&quot;               12
-## 11 &quot;ND&quot;              1227
-## 12 &quot;ND\t\t\t&quot;          23
-## 13 &quot;ND\t\t\t\t&quot;        39
-## 14 &quot;ND-BLK&quot;           675
-## 15 &quot;ND-BLK\t\t\t&quot;      27
-## 16 &quot;ND-BLK\t\t\t\t&quot;    21
-## 17  &lt;NA&gt;             1840</code></pre>
-<pre class="r"><code>dust4 &lt;- dust3 |&gt; 
-  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND-BLK\t\t\t&quot;, &quot;ND-BLK\t\t\t\t&quot;, &quot;ND&quot;, 
-                            &quot;BLK\t\t\t\t&quot;, &quot;BLK\t\t\t\t\t&quot;, &quot;ND\t\t\t\t&quot;, 
-                            &quot;ND\t\t\t\t\t&quot;,&quot;ND-BLK\t\t\t\t&quot;, &quot;ND-BLK\t\t\t\t\t&quot;))) 
+  count()</code></pre>
+<pre><code>## # A tibble: 8 × 2
+## # Groups:   qualifier [8]
+##   qualifier     n
+##   &lt;chr&gt;     &lt;int&gt;
+## 1 &lt;             3
+## 2 &lt;=          177
+## 3 =&lt;           49
+## 4 @            13
+## 5 BLK           2
+## 6 ND         1271
+## 7 ND-BLK        4
+## 8 &lt;NA&gt;       1907</code></pre>
+<p>Real quick, let’s look at that AAAAAA result:</p>
+<pre class="r"><code>quartz3 |&gt; 
+  filter(qualifier == &quot;AAAAAA&quot;) |&gt; 
+  slice(1)</code></pre>
+<pre><code>## # A tibble: 1 × 23
+##   inspection sampling_number establishment       date_sampled eighthr lab_number
+##        &lt;dbl&gt; &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;   &lt;chr&gt;     
+## 1  313880122 405081464       INTERNATIONAL STON… 2010-12-03   N       D92467    
+## # ℹ 17 more variables: field_number &lt;chr&gt;, type &lt;fct&gt;, blank &lt;chr&gt;, time &lt;dbl&gt;,
+## #   air_volume &lt;dbl&gt;, weight &lt;dbl&gt;, imis &lt;dbl&gt;, substance &lt;chr&gt;, result &lt;dbl&gt;,
+## #   uom &lt;fct&gt;, qualifier &lt;chr&gt;, year &lt;dbl&gt;, duration &lt;chr&gt;, lod &lt;lgl&gt;,
+## #   loq &lt;lgl&gt;, result_num &lt;dbl&gt;, quartz_pct &lt;dbl&gt;</code></pre>
+<p>Looks like a legitimate result. Because of that, we will retain it in
+our study.</p>
+<p>We will move forward with removing the blank values and instances of
+blanks from the qualifier:</p>
+<pre class="r"><code>dust4 &lt;- dust3 |&gt;
+  filter(blank == &quot;N&quot;,
+         !str_detect(coalesce(qualifier, &quot;&quot;), &quot;BLK&quot;))
 
-quartz4 &lt;- quartz3 |&gt; 
-  filter(!(qualifier %in% c(&quot;BLK&quot;,&quot;ND-BLK&quot;, &quot;ND-BLK/t&quot;, &quot;ND-BLK\t\t\t&quot;, &quot;ND-BLK\t\t\t\t&quot;, &quot;ND&quot;,
-                            &quot;ND\t\t\t&quot;, &quot;ND\t\t\t\t&quot;)))</code></pre>
-<p>From <em>dust</em>, we removed the following iterations of
-<strong>blank samples: </strong></p>
-<ul>
-<li>“BLK” (n = 295)</li>
-<li>“BLK (n=4)</li>
-<li>“BLK (n=5)</li>
-</ul>
-<p>and the following <strong>ND (LOQ) samples:</strong> - “ND” (n=232) -
-“ND (n=3) -”ND (n=8) - “ND-BLK” (n = 506) - “ND-BLK (n=22) -”ND-BLK
-(n=18)</p>
-<p>And from <em>quartz</em>, we removed the following iterations of
-<strong>blank samples: </strong></p>
-<ul>
-<li>“BLK” (n = 12)</li>
-</ul>
-<p>and the following <strong>ND (LOQ) samples:</strong></p>
-<ul>
-<li>“ND” (n = 1227)</li>
-<li>“ND (n=23)</li>
-<li>“ND (n=39)</li>
-<li>“ND-BLK” (n=675)</li>
-<li>“ND-BLK (n=27)</li>
-<li>“ND-BLK (n=21)</li>
-</ul>
-<p>We are now left with 2,540 observations in dust, and 2,153
-observations in quartz.</p>
+quartz4 &lt;- quartz3 |&gt;
+  filter(blank == &quot;N&quot;,
+         !str_detect(coalesce(qualifier, &quot;&quot;), &quot;BLK&quot;))
+
+nrow(dust4)</code></pre>
+<pre><code>## [1] 2773</code></pre>
+<pre class="r"><code>nrow(quartz4)</code></pre>
+<pre><code>## [1] 3420</code></pre>
 </div>
-<div id="no-duplicate-samples-1" class="section level2" number="2.5">
-<h2><span class="header-section-number">2.5</span> No duplicate
+<div id="no-duplicate-samples-1" class="section level2" number="3.5">
+<h2><span class="header-section-number">3.5</span> No duplicate
 samples</h2>
 <p>We only want to retain values that have the same Lab No., and values
 that correspond to the same date sampled. We are going to join these two
@@ -2501,11 +2544,11 @@ correspond to the same day/sample. First, we are going to rename our
 results from these two datasets into “dust_conc” and “quartz_pct”.</p>
 <pre class="r"><code>dust4 &lt;- dust4 |&gt; 
   select(lab_number, date_sampled, field_number, sampling_number, 
-         establishment, type, eighthr, time, dust_conc, dust_uom, duration, lod)
+         establishment, type, eighthr, time, dust_conc, dust_uom, duration, lod, loq)
 
 quartz4 &lt;- quartz4 |&gt; 
   select(lab_number, date_sampled, field_number, sampling_number, establishment,
-          quartz_pct, duration, lod)</code></pre>
+          quartz_pct, duration, lod, loq, time)</code></pre>
 <p>Checks before joining:</p>
 <p>Does either table have duplicate lab_number + date_sampled +
 establishment + field_number + result combos?</p>
@@ -2534,7 +2577,7 @@ dust4_duplicates |&gt;
 dust4_duplicates |&gt; 
   arrange(lab_number, field_number, date_sampled, establishment, dust_conc) |&gt; 
   head()</code></pre>
-<pre><code>## # A tibble: 6 × 12
+<pre><code>## # A tibble: 6 × 13
 ##   lab_number date_sampled field_number sampling_number establishment       type 
 ##   &lt;chr&gt;      &lt;date&gt;       &lt;chr&gt;        &lt;chr&gt;           &lt;chr&gt;               &lt;fct&gt;
 ## 1 F08985     2021-07-06   00379D       381509          SUDBURY GRANITE AN… Pers…
@@ -2543,15 +2586,24 @@ dust4_duplicates |&gt;
 ## 4 F08986     2021-07-06   00189D       381511          SUDBURY GRANITE AN… Pers…
 ## 5 F08987     2021-07-06   03936D       381508          SUDBURY GRANITE AN… Pers…
 ## 6 F08987     2021-07-06   03936D       381508          SUDBURY GRANITE AN… Pers…
-## # ℹ 6 more variables: eighthr &lt;chr&gt;, time &lt;dbl&gt;, dust_conc &lt;dbl&gt;,
-## #   dust_uom &lt;chr&gt;, duration &lt;chr&gt;, lod &lt;lgl&gt;</code></pre>
+## # ℹ 7 more variables: eighthr &lt;chr&gt;, time &lt;dbl&gt;, dust_conc &lt;dbl&gt;,
+## #   dust_uom &lt;chr&gt;, duration &lt;chr&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;</code></pre>
 <pre class="r"><code>dust4_dedup &lt;- dust4|&gt; 
   distinct(lab_number, field_number, dust_conc, date_sampled, 
            .keep_all = TRUE) 
 
-nrow(dust4_dedup) #how many rows are left after deleting duplicates?  </code></pre>
-<pre><code>## [1] 2299</code></pre>
-<p>After removing duplicates, we have 2,299.</p>
+nrow(dust4_dedup) #how many rows are left after deleting duplicates?   </code></pre>
+<pre><code>## [1] 2509</code></pre>
+<pre class="r"><code>dust4_dedup |&gt; 
+  filter(loq == FALSE, 
+         dust_conc == 0)</code></pre>
+<pre><code>## # A tibble: 2 × 13
+##   lab_number date_sampled field_number sampling_number establishment       type 
+##   &lt;chr&gt;      &lt;date&gt;       &lt;chr&gt;        &lt;chr&gt;           &lt;chr&gt;               &lt;fct&gt;
+## 1 L12558     2011-12-08   994-1        435116421       TRIPLE D MARBLE AN… Bulk 
+## 2 P47547     2004-02-23   X7910        434052213       GALLOY AND VAN ETT… Pers…
+## # ℹ 7 more variables: eighthr &lt;chr&gt;, time &lt;dbl&gt;, dust_conc &lt;dbl&gt;,
+## #   dust_uom &lt;chr&gt;, duration &lt;chr&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;</code></pre>
 <p>###Quartz</p>
 <p>Next, quartz:</p>
 <pre class="r"><code>#look at duplicates quartz
@@ -2565,55 +2617,62 @@ quartz4_duplicates |&gt;
   select(lab_number, field_number, date_sampled, establishment, quartz_pct) |&gt; 
   head()</code></pre>
 <pre><code>## # A tibble: 6 × 5
-##   lab_number field_number date_sampled establishment            quartz_pct
-##   &lt;chr&gt;      &lt;chr&gt;        &lt;date&gt;       &lt;chr&gt;                         &lt;dbl&gt;
-## 1 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC       0.21
-## 2 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC       0.21
-## 3 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC          0.19
-## 4 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC          0.19
-## 5 L99471     09498E       2017-01-30   ABSOLUTE SURFACES LLC          0.25
-## 6 L99471     09498E       2017-01-30   ABSOLUTE SURFACES LLC          0.25</code></pre>
+##   lab_number field_number date_sampled establishment               quartz_pct
+##   &lt;chr&gt;      &lt;chr&gt;        &lt;date&gt;       &lt;chr&gt;                            &lt;dbl&gt;
+## 1 L99057     04296E       2017-01-20   ENVIRONMENTAL MATERIALS LLC       0   
+## 2 L99057     04296E       2017-01-20   ENVIRONMENTAL MATERIALS LLC       0   
+## 3 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC          0.21
+## 4 L99461     00846C       2017-01-24   STONES AND DESIGNERS LLC          0.21
+## 5 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC             0.19
+## 6 L99470     05274C       2017-01-30   ABSOLUTE SURFACES LLC             0.19</code></pre>
 <pre class="r"><code>#all variables 
 quartz4_duplicates |&gt;   
   arrange(lab_number, field_number, date_sampled, establishment, quartz_pct) |&gt; 
   head()</code></pre>
-<pre><code>## # A tibble: 6 × 8
+<pre><code>## # A tibble: 6 × 10
 ##   lab_number date_sampled field_number sampling_number establishment  quartz_pct
 ##   &lt;chr&gt;      &lt;date&gt;       &lt;chr&gt;        &lt;chr&gt;           &lt;chr&gt;               &lt;dbl&gt;
-## 1 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
-## 2 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
-## 3 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
-## 4 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
-## 5 L99471     2017-01-30   09498E       260821          ABSOLUTE SURF…       0.25
-## 6 L99471     2017-01-30   09498E       260821          ABSOLUTE SURF…       0.25
-## # ℹ 2 more variables: duration &lt;chr&gt;, lod &lt;lgl&gt;</code></pre>
+## 1 L99057     2017-01-20   04296E       260127          ENVIRONMENTAL…       0   
+## 2 L99057     2017-01-20   04296E       260127          ENVIRONMENTAL…       0   
+## 3 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
+## 4 L99461     2017-01-24   00846C       260349          STONES AND DE…       0.21
+## 5 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
+## 6 L99470     2017-01-30   05274C       260818          ABSOLUTE SURF…       0.19
+## # ℹ 4 more variables: duration &lt;chr&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, time &lt;dbl&gt;</code></pre>
 <pre class="r"><code>quartz4_dedup &lt;- quartz4|&gt; 
-  distinct(lab_number, field_number, quartz_pct, date_sampled, 
+  distinct(lab_number, field_number, quartz_pct, date_sampled, time,
            .keep_all = TRUE) 
 
-nrow(quartz4_dedup) #how many rows are left after deleting duplicates? </code></pre>
-<pre><code>## [1] 2093</code></pre>
+nrow(quartz4_dedup) #how many rows are left after deleting duplicates?  </code></pre>
+<pre><code>## [1] 3329</code></pre>
+<pre class="r"><code>quartz4_dedup |&gt; 
+  filter(loq == FALSE, 
+         quartz_pct==0) |&gt; 
+  pull(field_number)</code></pre>
+<pre><code>##  [1] &quot;0646B&quot; &quot;Y7235&quot; &quot;Y7039&quot; &quot;Y7040&quot; &quot;Y7026&quot; &quot;Y5533&quot; &quot;Z6215&quot; &quot;Z3725&quot; &quot;Z8441&quot;
+## [10] &quot;Z6592&quot; &quot;Z6425&quot; &quot;Z6289&quot; &quot;Z4227&quot; &quot;Z3786&quot; &quot;Z3739&quot; &quot;OS-2&quot;  &quot;Z3392&quot; &quot;Z3325&quot;
+## [19] &quot;Y4193&quot;</code></pre>
 <p><strong>NOTE</strong>: when we performed this, we lost some
 information about different spellings of the establishments. This will
 likely come up again as being problematic when we merge with the other
 respirable silica dataset. Something to be aware of in the future.</p>
 </div>
-<div id="removing-unnecessary-columns" class="section level2" number="2.6">
-<h2><span class="header-section-number">2.6</span> Removing unnecessary
+<div id="removing-unnecessary-columns" class="section level2" number="3.6">
+<h2><span class="header-section-number">3.6</span> Removing unnecessary
 columns</h2>
 <p>We are only going to retain the join keys and quartz pct before
 merging with dust:</p>
 <pre class="r"><code># Remove unnecessary columns
 quartz_merge &lt;- quartz4_dedup |&gt; 
-  select(lab_number, field_number, quartz_pct, lod, duration)
+  select(lab_number, field_number, quartz_pct, lod, loq, duration)
 
 #removing the hyphen part after number
 dust_merge &lt;- dust4_dedup |&gt; 
   mutate(sampling_number = word(sampling_number, 1, sep = &quot;-&quot;))  
 
 glimpse(dust_merge) </code></pre>
-<pre><code>## Rows: 2,299
-## Columns: 12
+<pre><code>## Rows: 2,509
+## Columns: 13
 ## $ lab_number      &lt;chr&gt; &quot;65868&quot;, &quot;65871&quot;, &quot;65872&quot;, &quot;64207&quot;, &quot;64209&quot;, &quot;63663&quot;, …
 ## $ date_sampled    &lt;date&gt; 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16, 2026-…
 ## $ field_number    &lt;chr&gt; &quot;00775F&quot;, &quot;00641F&quot;, &quot;00235F&quot;, &quot;04715D&quot;, &quot;01043H&quot;, &quot;097…
@@ -2625,64 +2684,87 @@ glimpse(dust_merge) </code></pre>
 ## $ dust_conc       &lt;dbl&gt; 109, 124, 278, 1090, 514, 126, 107, 203, 111, 1060, 91…
 ## $ dust_uom        &lt;chr&gt; &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg…
 ## $ duration        &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;L…
-## $ lod             &lt;lgl&gt; TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, …</code></pre>
+## $ lod             &lt;lgl&gt; TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, …
+## $ loq             &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE…</code></pre>
 <pre class="r"><code>glimpse(quartz_merge) </code></pre>
-<pre><code>## Rows: 2,093
-## Columns: 5
-## $ lab_number   &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22391&quot;, &quot;S22389…
-## $ field_number &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;03283D&quot;, &quot;03294D…
-## $ quartz_pct   &lt;dbl&gt; 0.320, 0.290, 0.360, 0.380, 0.220, 0.230, 0.240, 0.210, 0…
+<pre><code>## Rows: 3,329
+## Columns: 6
+## $ lab_number   &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22509&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22392…
+## $ field_number &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03542E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;02839D…
+## $ quartz_pct   &lt;dbl&gt; 0.32, 0.29, 0.00, 0.36, 0.38, 0.00, 0.22, 0.00, 0.23, 0.2…
 ## $ lod          &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, F…
-## $ duration     &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Medi…</code></pre>
-<pre class="r"><code>merged_dust_quartz &lt;- quartz_merge|&gt; 
-  inner_join(dust_merge, by = c(&quot;lab_number&quot;, &quot;field_number&quot;),
-             relationship = &quot;one-to-one&quot;)  
+## $ loq          &lt;lgl&gt; FALSE, FALSE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, FALS…
+## $ duration     &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long…</code></pre>
+<pre class="r"><code>quartz_merge &lt;- quartz4_dedup |&gt; 
+  select(lab_number, field_number, quartz_pct, lod, loq, date_sampled, time)
+
+
+merged_dust_quartz &lt;- quartz_merge |&gt; 
+  inner_join(dust_merge, by = c(&quot;field_number&quot;),
+             relationship = &quot;one-to-one&quot;,
+             suffix = c(&quot;_qtz&quot;, &quot;_dust&quot;))
+
 
 #checking how many didn&#39;t match: 
 quartz_merge|&gt; 
-  anti_join(dust_merge, by = c(&quot;lab_number&quot;, &quot;field_number&quot;)) |&gt; 
+  anti_join(dust_merge, by = c(&quot;field_number&quot;)) |&gt; 
   nrow()</code></pre>
-<pre><code>## [1] 1458</code></pre>
+<pre><code>## [1] 2121</code></pre>
+<pre class="r"><code>dust_merge|&gt; 
+  anti_join(quartz_merge, by = c(&quot;field_number&quot;)) |&gt; 
+  nrow()</code></pre>
+<pre><code>## [1] 1301</code></pre>
 <pre class="r"><code>nrow(merged_dust_quartz) </code></pre>
-<pre><code>## [1] 635</code></pre>
+<pre><code>## [1] 1208</code></pre>
 <pre class="r"><code>glimpse(merged_dust_quartz) </code></pre>
-<pre><code>## Rows: 635
-## Columns: 15
-## $ lab_number      &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S22391&quot;, &quot;S22…
-## $ field_number    &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;03283D&quot;, &quot;032…
-## $ quartz_pct      &lt;dbl&gt; 0.320, 0.290, 0.360, 0.380, 0.220, 0.230, 0.240, 0.210…
-## $ lod.x           &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE…
-## $ duration.x      &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;M…
-## $ date_sampled    &lt;date&gt; 2018-09-26, 2018-09-26, 2018-09-26, 2018-09-26, 2018-…
-## $ sampling_number &lt;chr&gt; &quot;325911&quot;, &quot;325913&quot;, &quot;325916&quot;, &quot;325909&quot;, &quot;325669&quot;, &quot;325…
-## $ establishment   &lt;chr&gt; &quot;TELLURIDE STONE COMPANY&quot;, &quot;TELLURIDE STONE COMPANY&quot;, …
-## $ type            &lt;fct&gt; Personal, Personal, Personal, Personal, Personal, Pers…
-## $ eighthr         &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;N&quot;,…
-## $ time            &lt;dbl&gt; 426, 390, 422, 410, 295, 300, 300, 146, 145, 295, 514,…
-## $ dust_conc       &lt;dbl&gt; 395, 321, 129, 599, 4233, 4237, 1120, 939, 1290, 4321,…
-## $ dust_uom        &lt;chr&gt; &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg…
-## $ duration.y      &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;M…
-## $ lod.y           &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE…</code></pre>
-<p>Ok, looks like we have 635 observations.</p>
-<p>Let’s do a check to make sure that all the lods and durations match
-up; if so, we can delete one of the columns for both:</p>
-<pre class="r"><code>merged_dust_quartz |&gt; 
-  summarise(
-    lod_mismatch      = sum(lod.x != lod.y, na.rm = TRUE),
-    duration_mismatch = sum(duration.x != duration.y, na.rm = TRUE),
-    both_mismatch      = sum(lod.x != lod.y &amp; duration.x != duration.y, na.rm = TRUE),
-    either_mismatch    = sum(lod.x != lod.y | duration.x != duration.y, na.rm = TRUE)
-  )</code></pre>
-<pre><code>## # A tibble: 1 × 4
-##   lod_mismatch duration_mismatch both_mismatch either_mismatch
-##          &lt;int&gt;             &lt;int&gt;         &lt;int&gt;           &lt;int&gt;
-## 1            0                 0             0               0</code></pre>
+<pre><code>## Rows: 1,208
+## Columns: 19
+## $ lab_number_qtz    &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22509&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S…
+## $ field_number      &lt;chr&gt; &quot;03553E&quot;, &quot;03461E&quot;, &quot;03542E&quot;, &quot;03291E&quot;, &quot;03637E&quot;, &quot;0…
+## $ quartz_pct        &lt;dbl&gt; 0.32, 0.29, 0.00, 0.36, 0.38, 0.00, 0.22, 0.00, 0.23…
+## $ lod_qtz           &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FAL…
+## $ loq_qtz           &lt;lgl&gt; FALSE, FALSE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE,…
+## $ date_sampled_qtz  &lt;date&gt; 2018-09-26, 2018-09-26, 2018-09-26, 2018-09-26, 201…
+## $ time_qtz          &lt;dbl&gt; 426, 390, 415, 422, 410, 137, 295, 145, 300, 300, 14…
+## $ lab_number_dust   &lt;chr&gt; &quot;S22507&quot;, &quot;S22508&quot;, &quot;S22509&quot;, &quot;S22510&quot;, &quot;S22506&quot;, &quot;S…
+## $ date_sampled_dust &lt;date&gt; 2018-09-26, 2018-09-26, 2018-09-26, 2018-09-26, 201…
+## $ sampling_number   &lt;chr&gt; &quot;325911&quot;, &quot;325913&quot;, &quot;325915&quot;, &quot;325916&quot;, &quot;325909&quot;, &quot;3…
+## $ establishment     &lt;chr&gt; &quot;TELLURIDE STONE COMPANY&quot;, &quot;TELLURIDE STONE COMPANY&quot;…
+## $ type              &lt;fct&gt; Personal, Personal, Personal, Personal, Personal, Pe…
+## $ eighthr           &lt;chr&gt; &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;N&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y&quot;, &quot;Y…
+## $ time_dust         &lt;dbl&gt; 426, 390, 415, 422, 410, 137, 295, 145, 300, 300, 14…
+## $ dust_conc         &lt;dbl&gt; 395, 321, 125, 129, 599, 193, 4233, 110, 4237, 1120,…
+## $ dust_uom          &lt;chr&gt; &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;mcg/m3&quot;, &quot;m…
+## $ duration          &lt;chr&gt; &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, &quot;Long-Term&quot;, …
+## $ lod_dust          &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FAL…
+## $ loq_dust          &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FAL…</code></pre>
+<p>Let’s do a check to make sure that all the durations and dates match
+up:</p>
+<pre class="r"><code>merged_check &lt;- merged_dust_quartz |&gt; 
+  mutate(
+    date_match = as.Date(date_sampled_qtz) == as.Date(date_sampled_dust),
+    dur_match  = (as.numeric(time_qtz) == as.numeric(time_dust))
+  )
+
+# Checking that all the dates match
+merged_check |&gt; count(date_match, dur_match)</code></pre>
+<pre><code>## # A tibble: 1 × 3
+##   date_match dur_match     n
+##   &lt;lgl&gt;      &lt;lgl&gt;     &lt;int&gt;
+## 1 TRUE       TRUE       1208</code></pre>
 <p>They are the same! Great news, that means we can retain just one of
 the variables for each:</p>
 <pre class="r"><code>merged_dust_quartz &lt;-  merged_dust_quartz |&gt; 
-  select(-lod.y, -duration.y) |&gt; 
-  rename(lod = lod.x,
-         duration = duration.x) </code></pre>
+  select(-lod_dust, -loq_dust, -lab_number_dust, -date_sampled_dust) |&gt; 
+  rename(lod = lod_qtz,
+         loq = loq_qtz,
+         time = time_qtz,
+         date_sampled = date_sampled_qtz, 
+         lab_number = lab_number_qtz)  
+
+#whoops 
+merged_dust_quartz &lt;-  merged_dust_quartz |&gt; 
+  select(-time_dust) </code></pre>
 <p>Let’s perform our calculation to get the official silica
 concentration, and add a variable for the year:</p>
 <pre class="r"><code>merged_dust_quartz2 &lt;- merged_dust_quartz |&gt; 
@@ -2694,27 +2776,28 @@ merged_dust_quartz2 |&gt;
 <pre><code>## # A tibble: 1 × 2
 ##    mean    sd
 ##   &lt;dbl&gt; &lt;dbl&gt;
-## 1  263.  664.</code></pre>
+## 1  138.  499.</code></pre>
 <pre class="r"><code>#by year: 
 merged_dust_quartz2 |&gt; 
   group_by(year) |&gt; 
   summarize(mean = mean(silica_conc),sd = sd(silica_conc)) </code></pre>
-<pre><code>## # A tibble: 13 × 3
-##     year   mean     sd
-##    &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt;
-##  1  2006  112.   194. 
-##  2  2007 1010.  1743. 
-##  3  2008   51.5   19.4
-##  4  2009  213.   283. 
-##  5  2010  577.  1043. 
-##  6  2011  170.   304. 
-##  7  2012  303.   644. 
-##  8  2013  428.  1131. 
-##  9  2014  163.   238. 
-## 10  2015  161.   213. 
-## 11  2016  255.   764. 
-## 12  2017  128.   163. 
-## 13  2018  325.   455.</code></pre>
+<pre><code>## # A tibble: 14 × 3
+##     year  mean     sd
+##    &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt;
+##  1  2004   0      0  
+##  2  2006  67.2  150. 
+##  3  2007 713.  1521. 
+##  4  2008  20.6   29.8
+##  5  2009  62.1  175. 
+##  6  2010 307.   809. 
+##  7  2011  89.1  235. 
+##  8  2012 148.   474. 
+##  9  2013 202.   803. 
+## 10  2014  82.3  187. 
+## 11  2015  85.2  174. 
+## 12  2016 146.   590. 
+## 13  2017  77.2  141. 
+## 14  2018 169.   364.</code></pre>
 <p>##Personal Measures</p>
 <p>We need to ensure that we are only retaining measurements that are
 personal:</p>
@@ -2725,13 +2808,13 @@ personal:</p>
 ## # Groups:   type [2]
 ##   type         n
 ##   &lt;fct&gt;    &lt;int&gt;
-## 1 Area         4
-## 2 Personal   631</code></pre>
+## 1 Area         6
+## 2 Personal  1202</code></pre>
 <pre class="r"><code>merged_dust_quartz3 &lt;- merged_dust_quartz2|&gt; 
   filter(type == &quot;Personal&quot;)</code></pre>
 </div>
-<div id="contains-time-data-1" class="section level2" number="2.7">
-<h2><span class="header-section-number">2.7</span> Contains time
+<div id="contains-time-data-1" class="section level2" number="3.7">
+<h2><span class="header-section-number">3.7</span> Contains time
 data</h2>
 <pre class="r"><code>merged_dust_quartz3 |&gt; 
   group_by(duration) |&gt; 
@@ -2739,18 +2822,18 @@ data</h2>
 <pre><code>## # A tibble: 4 × 2
 ##   duration    `n()`
 ##   &lt;chr&gt;       &lt;int&gt;
-## 1 Long-Term     290
-## 2 Medium-Term   301
-## 3 Short-Term     34
-## 4 Task-Based      6</code></pre>
+## 1 Long-Term     476
+## 2 Medium-Term   582
+## 3 Short-Term    128
+## 4 Task-Based     16</code></pre>
 <pre class="r"><code>merged_dust_quartz4 &lt;- merged_dust_quartz3|&gt; 
  filter(!(is.na(duration)))
 nrow(merged_dust_quartz4)</code></pre>
-<pre><code>## [1] 631</code></pre>
+<pre><code>## [1] 1202</code></pre>
 </div>
 </div>
-<div id="merge-respirable-and-calculated-data" class="section level1" number="3">
-<h1><span class="header-section-number">3</span> Merge Respirable and
+<div id="merge-respirable-and-calculated-data" class="section level1" number="4">
+<h1><span class="header-section-number">4</span> Merge Respirable and
 Calculated data</h1>
 <p>Lastly, we need to merge our quartz and dust datasets with the
 respirable dataset. Before we do this, we need to make sure we include
@@ -2766,10 +2849,10 @@ dat7 &lt;- dat7 |&gt;
   mutate(imis = as.character(imis))</code></pre>
 <pre class="r"><code>combined_dat &lt;- bind_rows(dat7, merged_dust_quartz5)
 nrow(combined_dat) </code></pre>
-<pre><code>## [1] 1493</code></pre>
+<pre><code>## [1] 2496</code></pre>
 <pre class="r"><code>glimpse(combined_dat) </code></pre>
-<pre><code>## Rows: 1,493
-## Columns: 13
+<pre><code>## Rows: 2,496
+## Columns: 14
 ## $ sampling_number &lt;chr&gt; &quot;494572-OIS&quot;, &quot;494575-OIS&quot;, &quot;494578-OIS&quot;, &quot;492231-OIS&quot;…
 ## $ establishment   &lt;chr&gt; &quot;DELPHOS GRANITE WORKS INC&quot;, &quot;DELPHOS GRANITE WORKS IN…
 ## $ date_sampled    &lt;date&gt; 2026-05-14, 2026-05-14, 2026-05-14, 2026-04-16, 2026-…
@@ -2781,21 +2864,23 @@ nrow(combined_dat) </code></pre>
 ## $ year            &lt;dbl&gt; 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, 2026, …
 ## $ silica_conc     &lt;dbl&gt; 12.7, 13.9, 14.1, 250.0, 214.0, 25.7, 25.3, 25.7, 12.9…
 ## $ lod             &lt;lgl&gt; TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, TRU…
+## $ loq             &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE…
 ## $ type            &lt;fct&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…
 ## $ eighthr         &lt;chr&gt; NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA…</code></pre>
 <pre class="r"><code>combined_dat |&gt; 
   filter(silica_conc == 0) |&gt; 
   count(imis)</code></pre>
-<pre><code>## # A tibble: 1 × 2
+<pre><code>## # A tibble: 2 × 2
 ##   imis          n
 ##   &lt;chr&gt;     &lt;int&gt;
-## 1 9010_9130     6</code></pre>
+## 1 9000        432
+## 2 9010_9130   577</code></pre>
 <p>#Data check</p>
 <p>We want to see how many observations we have per year, as well as
 check for potential outliers:</p>
 <pre class="r"><code>summary(combined_dat$silica_conc)</code></pre>
 <pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-##     0.0    26.7    58.4   199.1   155.6  7372.8</code></pre>
+##    0.00    0.00   20.95  119.11   77.85 7372.80</code></pre>
 <pre class="r"><code>Q1 &lt;- quantile(combined_dat$silica_conc, 0.25, na.rm = TRUE)
 Q3 &lt;- quantile(combined_dat$silica_conc, 0.75, na.rm = TRUE)
 IQR_value &lt;- IQR(combined_dat$silica_conc, na.rm = TRUE)
@@ -2805,33 +2890,33 @@ upper_bound &lt;- Q3 + 1.5 * IQR_value
 
 lower_bound</code></pre>
 <pre><code>##      25% 
-## -166.602</code></pre>
+## -116.775</code></pre>
 <pre class="r"><code>upper_bound </code></pre>
-<pre><code>##    75% 
-## 348.87</code></pre>
+<pre><code>##     75% 
+## 194.625</code></pre>
 <pre class="r"><code>outliers &lt;- combined_dat |&gt; 
   filter(silica_conc &lt; lower_bound | silica_conc &gt; upper_bound)
 
 outliers </code></pre>
-<pre><code>## # A tibble: 162 × 13
+<pre><code>## # A tibble: 302 × 14
 ##    sampling_number establishment      date_sampled lab_number field_number  time
 ##    &lt;chr&gt;           &lt;chr&gt;              &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
-##  1 490584-OIS      PINTER MEMORIALS … 2026-03-23   62026      06521H         268
-##  2 487773-OIS      GRANITE MASTERS O… 2026-02-11   59210      02970H         353
-##  3 484848-OIS      BAY AREA GRANITE … 2025-12-17   56952      08000H          14
-##  4 475703-OIS      ABSOLUTE STONE AN… 2025-07-01   51034      MCY05861H      265
-##  5 472408-OIS      GLOBAL GRANITE LLC 2025-04-28   48511      07523H         390
-##  6 470109-OIS      GRANIX INC         2025-04-08   19420      07472E         440
-##  7 470130-OIS      GRANIX INC         2025-04-08   19435      07093E          15
-##  8 465125          MILESTONE NEW GEN… 2025-01-30   F53746     05771D #B      221
-##  9 465190          MILESTONE NEW GEN… 2025-01-30   F53747     04432H #A      188
-## 10 459859          GT STONE GRANITE … 2024-10-25   F51746     03663H         100
-## # ℹ 152 more rows
-## # ℹ 7 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
-## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+##  1 492231-OIS      CELTIC STONE GRAN… 2026-04-16   64207      04715D         390
+##  2 492232-OIS      CELTIC STONE GRAN… 2026-04-16   64209      01043H         390
+##  3 492098-OIS      TNT SERVICES CORP  2026-04-14   63665      09352H         278
+##  4 491870-OIS      REVIVAL STONE AND… 2026-04-09   63184      06873H         442
+##  5 490584-OIS      PINTER MEMORIALS … 2026-03-23   62026      06521H         268
+##  6 489132-OIS      BURTON MONUMENT C… 2026-03-03   60470      NJ-1           249
+##  7 487773-OIS      GRANITE MASTERS O… 2026-02-11   59210      02970H         353
+##  8 485532-OIS      JONES STONE AND M… 2026-01-07   57566      00956D         373
+##  9 484848-OIS      BAY AREA GRANITE … 2025-12-17   56952      08000H          14
+## 10 484900-OIS      GRANITE USA        2025-12-17   56967      5B2            225
+## # ℹ 292 more rows
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
 <pre class="r"><code>combined_dat |&gt; 
   slice_max(silica_conc, n = 5)</code></pre>
-<pre><code>## # A tibble: 5 × 13
+<pre><code>## # A tibble: 5 × 14
 ##   sampling_number establishment       date_sampled lab_number field_number  time
 ##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
 ## 1 230024          LIBRESTONE MARBLE … 2016-01-06   L83025     07203C           2
@@ -2839,8 +2924,8 @@ outliers </code></pre>
 ## 3 401767322       ALLIED STONE INC    2007-09-12   D35799     Q818           240
 ## 4 914219159       KOL MARBLE AND GRA… 2010-10-14   D89461     X0545          261
 ## 5 16999           DIXIE GRANITE CO I… 2012-04-26   L21419     1417A          152
-## # ℹ 7 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
-## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
 <p>For our outliers, we want to be certain that none of these started as
 a different unit of measurement. We will compare with our original
 database:</p>
@@ -2857,22 +2942,323 @@ outlier_field_no </code></pre>
 ## # ℹ 3 variables: uom &lt;fct&gt;, result_num &lt;dbl&gt;, eighthr &lt;chr&gt;</code></pre>
 <pre class="r"><code>combined_dat |&gt; 
   group_by(eighthr) |&gt; 
-  count()</code></pre>
+  count() </code></pre>
 <pre><code>## # A tibble: 3 × 2
 ## # Groups:   eighthr [3]
 ##   eighthr     n
 ##   &lt;chr&gt;   &lt;int&gt;
-## 1 N         546
-## 2 Y          85
-## 3 &lt;NA&gt;      862</code></pre>
+## 1 N        1030
+## 2 Y         172
+## 3 &lt;NA&gt;     1294</code></pre>
 <p>Ok, all of these started off as mcg/m3 interestingly. We cannot chalk
 it up to being incorrect measurement classification.</p>
+<p>Let’s also check real quick that no observations are duplicates:
+(ignoring the non-detects, this time)</p>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(duplicated(combined_dat) | duplicated(combined_dat, fromLast = TRUE)) |&gt; 
+  arrange(field_number) |&gt; 
+  print(n = Inf) </code></pre>
+<pre><code>## # A tibble: 0 × 14
+## # ℹ 14 variables: sampling_number &lt;chr&gt;, establishment &lt;chr&gt;,
+## #   date_sampled &lt;date&gt;, lab_number &lt;chr&gt;, field_number &lt;chr&gt;, time &lt;dbl&gt;,
+## #   duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;, silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;,
+## #   loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>dup_profile &lt;- combined_dat |&gt; 
+  filter(loq == FALSE) |&gt; 
+  group_by(field_number) |&gt; 
+  filter(n() &gt; 1) |&gt; 
+  summarise(
+    n_rows      = n(),
+    n_results   = n_distinct(silica_conc),
+    n_imis      = n_distinct(imis),
+    n_lab       = n_distinct(lab_number),
+    n_sampling  = n_distinct(sampling_number),
+    n_dates     = n_distinct(date_sampled),
+    n_times     = n_distinct(time),
+    n_lod       = n_distinct(lod),
+    .groups = &quot;drop&quot;
+  ) |&gt; 
+  arrange(desc(n_rows)) 
+print(dup_profile)</code></pre>
+<pre><code>## # A tibble: 44 × 9
+##    field_number n_rows n_results n_imis n_lab n_sampling n_dates n_times n_lod
+##    &lt;chr&gt;         &lt;int&gt;     &lt;int&gt;  &lt;int&gt; &lt;int&gt;      &lt;int&gt;   &lt;int&gt;   &lt;int&gt; &lt;int&gt;
+##  1 00195E            2         2      2     1          1       1       1     1
+##  2 00464E            2         2      2     1          1       1       1     1
+##  3 02653E            2         2      2     1          1       1       1     1
+##  4 02835E            2         2      2     1          1       1       1     1
+##  5 02855D            2         2      2     1          1       1       1     1
+##  6 02857D            2         2      2     1          1       1       1     1
+##  7 03015E            2         2      2     1          1       1       1     1
+##  8 03283D            2         2      2     1          1       1       1     1
+##  9 03289D            2         2      2     1          1       1       1     1
+## 10 03291E            2         2      2     1          1       1       1     1
+## # ℹ 34 more rows</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;00195E&quot;) |&gt; 
+  slice(1:2)  </code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 279417          HALQUIST STONE COM… 2017-09-14   S09590     00195E         131
+## 2 279417          HALQUIST STONE COM… 2017-09-14   S09590     00195E         131
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;00464E&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 279417          HALQUIST STONE COM… 2017-09-14   S09591     00464E         185
+## 2 279417          HALQUIST STONE COM… 2017-09-14   S09591     00464E         185
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;02653E&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;         &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 281477          RID STONE INC 2017-10-11   S10378     02653E         404
+## 2 281477          RID STONE INC 2017-10-11   S10378     02653E         404
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;02835E&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 287071          JONES STONE AND MA… 2017-12-13   S12518     02835E         387
+## 2 287071          JONES STONE AND MA… 2017-12-13   S12518     02835E         387
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;02855D&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 325676          RIVER GRANITE COMP… 2018-09-20   S22393     02855D         300
+## 2 325676          RIVER GRANITE COMP… 2018-09-20   S22393     02855D         300
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;09710H&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 492088-OIS      CL SERVICES AND DI… 2026-04-15   63663      09710H         444
+## 2 492088-OIS      CL SERVICES AND DI… 2026-04-15   63663      09710H         444
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>#how different are they 
+dup_diffs &lt;- combined_dat |&gt; 
+  filter(loq == FALSE) |&gt; 
+  group_by(field_number) |&gt; 
+  filter(n() == 2,            
+         n_distinct(lab_number) == 1) |&gt; 
+  summarise(
+    r_low        = min(silica_conc),
+    r_high       = max(silica_conc),
+    abs_diff     = r_high - r_low,
+    pair_mean    = mean(silica_conc),
+    rel_diff_pct = 100 * abs_diff / pair_mean,
+    any_lod      = any(lod),
+    .groups = &quot;drop&quot;
+  )
+dup_diffs</code></pre>
+<pre><code>## # A tibble: 44 × 7
+##    field_number r_low r_high abs_diff pair_mean rel_diff_pct any_lod
+##    &lt;chr&gt;        &lt;dbl&gt;  &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;        &lt;dbl&gt; &lt;lgl&gt;  
+##  1 00195E        86.8   87.0   0.222       86.9        0.255 FALSE  
+##  2 00464E        94.6   95     0.357       94.8        0.376 FALSE  
+##  3 02653E        18.4   18.5   0.0500      18.5        0.271 FALSE  
+##  4 02835E       162    165.    2.64       163.         1.62  FALSE  
+##  5 02855D       269.   274     5.20       271.         1.92  FALSE  
+##  6 02857D       948    951.    2.62       949.         0.276 FALSE  
+##  7 03015E       290    296.    5.64       293.         1.93  FALSE  
+##  8 03283D       931.   947    15.7        939.         1.68  FALSE  
+##  9 03289D       195    197.    2.19       196.         1.12  FALSE  
+## 10 03291E        46.1   46.4   0.340       46.3        0.735 FALSE  
+## # ℹ 34 more rows</code></pre>
+<pre class="r"><code>#retaining just the 9000 imis in the instances where some observations have everything the same except for that  
+
+duplicate_fields &lt;- dup_profile |&gt; 
+  filter(n_imis == 2) |&gt; 
+  pull(field_number)
+ 
+
+combined_dat2 &lt;- combined_dat |&gt; 
+  filter(!(field_number %in% duplicate_fields &amp; imis == &quot;9010_9130&quot;)) 
+
+# How many rows were removed? 
+nrow(combined_dat) - nrow(combined_dat2) </code></pre>
+<pre><code>## [1] 39</code></pre>
+<pre class="r"><code>#how many remain that are duplicates still?
+
+dup_profile2 &lt;- combined_dat2 |&gt; 
+  filter(loq == FALSE) |&gt; 
+  group_by(field_number) |&gt; 
+  filter(n() &gt; 1) |&gt; 
+  summarise(
+    n_rows      = n(),
+    n_results   = n_distinct(silica_conc),
+    n_imis      = n_distinct(imis),
+    n_lab       = n_distinct(lab_number),
+    n_sampling  = n_distinct(sampling_number),
+    n_dates     = n_distinct(date_sampled),
+    n_times     = n_distinct(time),
+    n_lod       = n_distinct(lod),
+    .groups = &quot;drop&quot;
+  ) |&gt; 
+  arrange(desc(n_rows)) 
+print(dup_profile2) </code></pre>
+<pre><code>## # A tibble: 5 × 9
+##   field_number n_rows n_results n_imis n_lab n_sampling n_dates n_times n_lod
+##   &lt;chr&gt;         &lt;int&gt;     &lt;int&gt;  &lt;int&gt; &lt;int&gt;      &lt;int&gt;   &lt;int&gt;   &lt;int&gt; &lt;int&gt;
+## 1 06497H            2         2      1     1          1       1       1     1
+## 2 09237H            2         2      1     1          1       1       1     1
+## 3 09358H            2         2      1     1          1       1       1     2
+## 4 09488H            2         2      1     1          1       1       1     1
+## 5 09710H            2         2      1     1          1       1       1     1</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;06497H&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 490582-OIS      PINTER MEMORIALS I… 2026-03-23   62022      06497H          60
+## 2 490582-OIS      PINTER MEMORIALS I… 2026-03-23   62022      06497H          60
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;09237H&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 490748-OIS      L AND M MARBLE AND… 2026-03-26   62233      09237H         230
+## 2 490748-OIS      L AND M MARBLE AND… 2026-03-26   62233      09237H         230
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;09358H&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 492086-OIS      CL SERVICES AND DI… 2026-04-15   63660      09358H         452
+## 2 492086-OIS      CL SERVICES AND DI… 2026-04-15   63660      09358H         452
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;09488H&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 492087-OIS      CL SERVICES AND DI… 2026-04-15   63662      09488H         453
+## 2 492087-OIS      CL SERVICES AND DI… 2026-04-15   63662      09488H         453
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<pre class="r"><code>combined_dat |&gt; 
+  filter(field_number == &quot;09710H&quot;) |&gt; 
+  slice(1:2)</code></pre>
+<pre><code>## # A tibble: 2 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 492088-OIS      CL SERVICES AND DI… 2026-04-15   63663      09710H         444
+## 2 492088-OIS      CL SERVICES AND DI… 2026-04-15   63663      09710H         444
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<p>Hallelujah: all the remaining duplicates in our data are from 2026.
+This is something to note for the future: data from 2026 are a MESS.
+Reporting has not improved.</p>
+<p>Let’s also double check on our 0 issue from before:</p>
+<pre class="r"><code>combined_dat2 |&gt; 
+  filter(loq == FALSE, 
+         silica_conc == 0) |&gt; 
+  count() </code></pre>
+<pre><code>## # A tibble: 1 × 1
+##       n
+##   &lt;int&gt;
+## 1     6</code></pre>
+<pre class="r"><code>combined_dat2 |&gt; 
+    filter(loq == FALSE, 
+         silica_conc == 0) </code></pre>
+<pre><code>## # A tibble: 6 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 435662515       CNC STONECRAFT OF … 2007-08-07   D34176     Z6425          467
+## 2 435662499       CNC STONECRAFT OF … 2007-08-07   D34177     Z6289          431
+## 3 435662507       CNC STONECRAFT OF … 2007-08-07   D34179     Z4227           52
+## 4 435662507       CNC STONECRAFT OF … 2007-08-07   D34178     Z3786          419
+## 5 914266838       STAR MARBLE AND GR… 2006-11-14   D22225     Z3392           75
+## 6 914266838       STAR MARBLE AND GR… 2006-11-14   D22226     Z3325          134
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<p>To be frank, I’m not sure what to do about these. There’s only 6 0’s,
+but from an examination of them, I can’t figure out what is wrong with
+the measurements to make this be the result. They are all from the
+generated data, which means that the respirable dust fraction would have
+had to have been 0. They aren’t below the level of quantification, they
+aren’t non-detects… they did come from earlier on in the study period,
+so I suppose it is possible that the rigor of reporting/sampling
+improved.</p>
+<p>Here are the respirable dust observations that was 0 earlier on from
+data cleaning: X7910 And for quartz: “0646B” “Y7235” “Y7039” “Y7040”
+“Y7026” “Y5533” “Z6215” “Z3725” “Z8441” “Z6592” “Z6425” “Z6289” “Z4227”
+[14] “Z3786” “Z3739” “OS-2” “Z3392” “Z3325” “Y4193”</p>
+<p>Let’s see what’s present:</p>
+<pre class="r"><code>zeros &lt;- c(&quot;X7910&quot;, &quot;0646B&quot;, &quot;Y7235&quot;, &quot;Y7039&quot; ,&quot;Y7040&quot; ,&quot;Y7026&quot; ,&quot;Y5533&quot;, &quot;Z6215&quot; ,&quot;Z3725&quot;, &quot;Z8441&quot; ,&quot;Z6592&quot;, &quot;Z6425&quot; ,&quot;Z6289&quot;, &quot;Z4227&quot;,
+&quot;Z3786&quot;, &quot;Z3739&quot; ,&quot;OS-2&quot;,  &quot;Z3392&quot; ,&quot;Z3325&quot;, &quot;Y4193&quot;) 
+
+combined_dat2 |&gt; 
+    filter(loq == FALSE, 
+         silica_conc == 0,
+         field_number %in% zeros) </code></pre>
+<pre><code>## # A tibble: 6 × 14
+##   sampling_number establishment       date_sampled lab_number field_number  time
+##   &lt;chr&gt;           &lt;chr&gt;               &lt;date&gt;       &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1 435662515       CNC STONECRAFT OF … 2007-08-07   D34176     Z6425          467
+## 2 435662499       CNC STONECRAFT OF … 2007-08-07   D34177     Z6289          431
+## 3 435662507       CNC STONECRAFT OF … 2007-08-07   D34179     Z4227           52
+## 4 435662507       CNC STONECRAFT OF … 2007-08-07   D34178     Z3786          419
+## 5 914266838       STAR MARBLE AND GR… 2006-11-14   D22225     Z3392           75
+## 6 914266838       STAR MARBLE AND GR… 2006-11-14   D22226     Z3325          134
+## # ℹ 8 more variables: duration &lt;chr&gt;, imis &lt;chr&gt;, year &lt;dbl&gt;,
+## #   silica_conc &lt;dbl&gt;, lod &lt;lgl&gt;, loq &lt;lgl&gt;, type &lt;fct&gt;, eighthr &lt;chr&gt;</code></pre>
+<p>All 6 of these observations correspond to instances where the quartz
+fraction was 0%. Let’s just make note of this for later.</p>
 </div>
-<div id="excluding-samples-from-2026" class="section level1" number="4">
-<h1><span class="header-section-number">4</span> Excluding samples from
+<div id="excluding-samples-from-2026" class="section level1" number="5">
+<h1><span class="header-section-number">5</span> Excluding samples from
 2026</h1>
+<p>How many are from 2026?</p>
+<pre class="r"><code>combined_dat2 |&gt; 
+  filter(year == 2026) %&gt;% 
+  nrow()</code></pre>
+<pre><code>## [1] 92</code></pre>
+<pre class="r"><code>combined_dat3 &lt;- combined_dat2 |&gt; 
+  filter(year &lt; 2026)</code></pre>
+<p>##How many are non-detects?</p>
+<pre class="r"><code>combined_dat3 |&gt; 
+  group_by(loq) |&gt; 
+  count() </code></pre>
+<pre><code>## # A tibble: 2 × 2
+## # Groups:   loq [2]
+##   loq       n
+##   &lt;lgl&gt; &lt;int&gt;
+## 1 FALSE  1362
+## 2 TRUE   1003</code></pre>
+<p>We don’t need the “type” variable, we can get rid of it:</p>
+<pre class="r"><code>combined_dat3 &lt;- combined_dat3 |&gt; 
+  select(-type)</code></pre>
 <p>Let’s save our analytic dataset:</p>
-<pre class="r"><code>write_csv(combined_dat, &quot;../CleanData/study_dat.csv&quot;)</code></pre>
+<pre class="r"><code>write_csv(combined_dat3, &quot;../CleanData/study_dat.csv&quot;)</code></pre>
 </div>
 
 
